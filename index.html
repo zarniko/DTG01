@@ -7727,15 +7727,15 @@ const TECHNO = {
     const hatThin = (dub ? 0.8 : 1) * busy;
 
     // Open hats — off-beat 8ths; presence set by the song's hat bias.
-    const ohatProb = (0.30 + hatBias * 0.5) * hatThin;
-    for (let c = 2; c < COLS; c += 4) L.ohat[c] = R() < ohatProb * (0.35 + density * 0.65) ? 1.0 : 0;
+    const ohatProb = (0.24 + hatBias * 0.4) * hatThin;
+    for (let c = 2; c < COLS; c += 4) L.ohat[c] = R() < ohatProb * (0.25 + density * 0.55) ? 1.0 : 0;
 
     // Closed hats — shuffled 16ths (the sequencer's swing gives the lilt) with
     // velocity contrast, plus sparse quiet ghost notes between them for the
     // Tresor-style shuffle/tension.
-    const chatProb = (0.30 + hatBias * 0.45) * hatThin;
-    for (let c = 1; c < COLS; c += 2) if (R() < chatProb * (0.35 + density * 0.65)) L.chat[c] = 0.4 + R() * 0.45;
-    for (let c = 2; c < COLS; c += 2) if (!L.chat[c] && !L.ohat[c] && c % 4 !== 0 && R() < 0.32 * hatBias * density) L.chat[c] = 0.15 + R() * 0.16;
+    const chatProb = (0.24 + hatBias * 0.36) * hatThin;
+    for (let c = 1; c < COLS; c += 2) if (R() < chatProb * (0.25 + density * 0.55)) L.chat[c] = 0.4 + R() * 0.45;
+    for (let c = 2; c < COLS; c += 2) if (!L.chat[c] && !L.ohat[c] && c % 4 !== 0 && R() < 0.18 * hatBias * density) L.chat[c] = 0.15 + R() * 0.16;
 
     // Rim — euclidean accents off the downbeats; odd pulse counts (5/7/9) give the
     // rolling, against-the-grid feel (shared seed/rotation in song mode).
@@ -7794,9 +7794,9 @@ const TECHNO = {
 
     // Shaker — gentle sparse 16th layer (busier on the 'percussive' flavour; thinned
     // for dub so submerged/expanse stay minimal under the delay/reverb space).
-    const shkChance = (flavor === 'percussive' ? 0.7 : (dub ? 0.22 : 0.4)) * busy;
+    const shkChance = (flavor === 'percussive' ? 0.5 : (dub ? 0.18 : 0.32)) * busy;
     const shkDens   = (dub ? 0.5 : 1) * busy;
-    if (R() < shkChance) for (let c = 1; c < COLS; c += 2) if (R() < (0.28 + hatBias * 0.2) * density * shkDens) L.shkr[c] = 0.2 + R() * 0.2;
+    if (R() < shkChance) for (let c = 1; c < COLS; c += 2) if (R() < (0.18 + hatBias * 0.15) * density * shkDens) L.shkr[c] = 0.2 + R() * 0.2;
 
     // Cowbell — a rare dubby off-beat tone.
     if ((dub || flavor === 'dubby') && R() < 0.16 * density) L.cow[pick([6, 10, 14])] = 0.5;
@@ -8707,8 +8707,8 @@ function composeDrSong() {
     flavor,
     industrial:  Math.random() < 0.4,        // ~40% of songs lean industrial
     hatBias:    flavor === 'sparse' ? rnd(0.25, 0.45)
-              : flavor === 'percussive' ? rnd(0.60, 0.85)
-              : rnd(0.40, 0.70),
+              : flavor === 'percussive' ? rnd(0.50, 0.72)
+              : rnd(0.40, 0.65),
     ridePresent: Math.random() < (flavor === 'dubby' || flavor === 'sparse' ? 0.85 : 0.55),
   };
   // Publish the rhythmic DNA so the grid can write euclidean counterpoint against
