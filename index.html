@@ -7116,7 +7116,7 @@ function drumDriveNode(amount) {
 }
 // Bit-depth reduction via a staircase shaper — lo-fi digital grit (SRR-flavoured).
 function _drumCrushCurve(amount) {
-  const bits = Math.max(1.5, 8 - amount * 6.5), levels = Math.pow(2, bits);
+  const bits = Math.max(3, 8 - amount * 5), levels = Math.pow(2, bits);
   const n = 1024, curve = new Float32Array(n);
   for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.round(x * levels) / levels; }
   return curve;
@@ -7575,18 +7575,18 @@ function programHitFx(L, dub) {
     if (L.clap[c]) fx.decayMul.clap[c] = rng(1.1, 1.4);
     if (L.chat[c]) {
       fx.pan.chat[c] = rng(0.15, 0.5) * (c % 4 === 1 ? -1 : 1);
-      if (dub) fx.crush.chat[c] = rng(0.15, 0.40);
-      fx.filt.chat[c] = dub ? rng(-0.55, -0.25) : rng(-0.35, -0.05); fx.prob.chat[c] = rng(0.60, 0.92);
+      if (dub) fx.crush.chat[c] = rng(0.08, 0.22);
+      fx.filt.chat[c] = dub ? rng(-0.60, -0.35) : rng(-0.45, -0.18); fx.prob.chat[c] = rng(0.60, 0.92);
     }
-    if (L.ohat[c]) { fx.pan.ohat[c] = widePan() * 0.5; fx.decayMul.ohat[c] = rng(1.1, 1.5); fx.filt.ohat[c] = rng(-0.25, 0); }
+    if (L.ohat[c]) { fx.pan.ohat[c] = widePan() * 0.5; fx.decayMul.ohat[c] = rng(1.1, 1.5); fx.filt.ohat[c] = rng(-0.35, -0.10); }
     if (L.rim[c]) { fx.pan.rim[c] = widePan(); fx.ptch.rim[c] = pick([-5, -3, 0, 3, 5, 7]); fx.prob.rim[c] = rng(0.6, 1.0); }
     if (L.ride[c]) { fx.pan.ride[c] = widePan(); fx.decayMul.ride[c] = rng(1.2, 1.8); fx.filt.ride[c] = rng(-0.2, 0.1); fx.prob.ride[c] = rng(0.6, 0.9); }
     if (L.tomH[c]) { fx.ptch.tomH[c] = pick([0, 2, 3]); fx.pan.tomH[c] = rng(0.2, 0.5); }
     if (L.tomM[c]) { fx.ptch.tomM[c] = pick([-2, 0, 2]); }
     if (L.tomL[c]) { fx.ptch.tomL[c] = pick([-4, -2, 0]); fx.pan.tomL[c] = rng(-0.5, -0.2); fx.decayMul.tomL[c] = rng(1.2, 1.6); }
-    if (L.snr2[c]) { fx.pan.snr2[c] = widePan() * 0.6; fx.crush.snr2[c] = rng(0.1, 0.3); fx.prob.snr2[c] = rng(0.5, 0.85); }
+    if (L.snr2[c]) { fx.pan.snr2[c] = widePan() * 0.6; fx.crush.snr2[c] = rng(0.05, 0.18); fx.prob.snr2[c] = rng(0.5, 0.85); }
     if (L.shkr[c]) fx.pan.shkr[c] = widePan() * 0.7;
-    if (L.cow[c]) { fx.ptch.cow[c] = pick([-3, 0, 3]); fx.pan.cow[c] = rng(-0.4, 0.4); fx.crush.cow[c] = rng(0.1, 0.3); }
+    if (L.cow[c]) { fx.ptch.cow[c] = pick([-3, 0, 3]); fx.pan.cow[c] = rng(-0.4, 0.4); fx.crush.cow[c] = rng(0.05, 0.18); }
     if (L.crash1[c]) { fx.decayMul.crash1[c] = rng(1.2, 1.8); fx.pan.crash1[c] = rng(-0.3, 0.3); }
   }
 
