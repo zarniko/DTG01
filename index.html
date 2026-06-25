@@ -723,7 +723,7 @@
 
      DR01 drum machine  (lives inside the IG01 script block; uses dr$ = getElementById)
        §DR01:dub            dub send/return bus (per-hit sends → delay+reverb → return knob)
-       §DR01:atmo           atmospheres: presets · bed engine (drone/sub/static/drive/reverb) · LFOs · panel · rollAtmosphere
+       §DR01:atmo           atmospheres: presets · bed engine (drone/sub/static/drive/reverb) · LFOs · panel · rollAtmosphere · driftAtmosphere (smooth mood-to-mood glide)
        §DR01:voices         drum voices (kick/snare/hat/clap/rim/tom/metal/…) + per-hit FX chain
        §DR01:engine         TECHNO state + regen() generator + scheduleStep() playback
        §DR01:state          asgGetDrumState / asgSetDrumState (save/load round-trip)
@@ -5643,9 +5643,11 @@ function retuneAtmosphere() {
   sub.connect(atmo.subGain); sub.start(); atmo.subOsc = sub;
 }
 // Push the current atmosphere's levels/colours into the bed (smooth ramps).
-function applyAtmosphere() {
+// `ramp` lets a song-transition drift glide over several bars instead of the
+// default quick 0.1s settle used for manual slider/preset edits.
+function applyAtmosphere(ramp) {
   if (!atmo || !audioCtx) return;
-  const t = audioCtx.currentTime, S2 = 0.1;
+  const t = audioCtx.currentTime, S2 = ramp || 0.1;
   const a = atmoCfg();
   atmo.droneMix.gain.setTargetAtTime(a.drone.level * 0.12, t, S2);
   atmo.droneFilt.frequency.setTargetAtTime(a.drone.cutoff, t, S2);
@@ -5678,6 +5680,49 @@ function setAtmosphere(name) {
   applyDubSend();
   updateAtmoLevel();
   reflectAtmoUI();
+}
+
+// Which moods are a "one step" musical move from each other — paired by shared
+// drum character first (deep ↔ deep, dub ↔ dub) plus one cross-family link each,
+// so a drift never jumps the whole palette in one go (monolith → expanse direct
+// would swap both drumStyle AND interval family at once; going via corrosion or
+// submerged keeps at least one axis steady, which is what reads as "related"
+// rather than "random").
+const ATMOSPHERE_NEIGHBORS = {
+  monolith:  ['corrosion', 'submerged'],
+  corrosion: ['monolith', 'expanse'],
+  submerged: ['expanse', 'monolith'],
+  expanse:   ['submerged', 'corrosion'],
+};
+
+// Glide from the current mood to a neighbouring one over `bars` bars instead of
+// snapping — used for song-to-song drift during auto-progression. The pad's
+// pitch content (oscillator intervals/type) can't be ramped as an AudioParam, so
+// it gets a brief duck-and-recover: dip the pad under the swap, retune while
+// it's quiet, then glide every level/colour param back up together. Timed to
+// the tempo so the dip reads as a breath, not a glitch.
+function driftAtmosphere(name, bars = 3) {
+  if (!ATMOSPHERES[name] || name === TECHNO.atmosphere || !atmo || !audioCtx) {
+    if (ATMOSPHERES[name]) setAtmosphere(name);   // no live bed yet — just switch state
+    return;
+  }
+  const barSec = (60 / (S.bpm || 120)) * 4;
+  const dur = bars * barSec;
+  TECHNO.atmosphere = name;
+  TECHNO.style = ATMOSPHERES[name].drumStyle;
+  TECHNO.atmoAudio = JSON.parse(JSON.stringify(ATMOSPHERES[name].audio));
+  applyDubSend();
+  reflectAtmoUI();
+  populateGridMoods();
+  const dsel = document.getElementById('dr-styleSelect'); if (dsel) dsel.value = name;
+  const t = audioCtx.currentTime;
+  const dipTo = atmo.droneMix.gain.value * 0.12;
+  atmo.droneMix.gain.setTargetAtTime(dipTo, t, dur * 0.15);          // duck the pad first
+  setTimeout(() => {
+    retuneAtmosphere();                  // swap oscillator pitches/type while quiet
+    applyAtmosphere(dur * 0.35);         // long glide back up + colour move together
+    applyAllAtmoLfo();
+  }, dur * 350);                         // fire ~mid-dip (ms)
 }
 
 // ── Atmosphere bed mix UI — sliders + (slow) LFO accordions, write live to atmoCfg() ──
@@ -8574,10 +8619,9 @@ document.addEventListener('keydown', e => {
 
 document.getElementById('dr-playBtn').addEventListener('click', () => S.playing ? stopSeq() : startSeq());
 document.getElementById('dr-styleSelect').addEventListener('change', function () {
-  setAtmosphere(this.value);   // sets style + dub send + the atmosphere bed together
-  TECHNO.regen();
-  clearDrSel();
-  renderDrAll();
+  // Swap the sound character only — dub send + atmosphere bed change live, but the
+  // current page's hits stay put until the user clicks generate.
+  setAtmosphere(this.value);
   populateGridMoods();         // grid mood options follow the atmosphere's drum style
 });
 // ── Song composition ────────────────────────────────────────────────────────
@@ -8761,7 +8805,14 @@ function drScheduleNextProgression() {
     if (!drProgressActive) return;
     drProgressPage++;
     if (drProgressPage >= N_PAGES) {
-      // Cycle complete — compose a brand-new song and roll round again.
+      // Cycle complete — about half the time, glide one step to a neighbouring
+      // mood (see ATMOSPHERE_NEIGHBORS) before composing the next song, so a
+      // long auto-progression slowly drifts through the atmosphere palette
+      // instead of sitting on one mood all night.
+      if (Math.random() < 0.5) {
+        const neighbors = ATMOSPHERE_NEIGHBORS[TECHNO.atmosphere];
+        if (neighbors) driftAtmosphere(neighbors[(Math.random() * neighbors.length) | 0]);
+      }
       composeDrSong();
       drProgressLoops = drBuildProgression(S.bpm);
       drProgressPage = 0;
