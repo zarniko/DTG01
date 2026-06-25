@@ -725,7 +725,7 @@
        §DR01:dub            dub send/return bus (per-hit sends → delay+reverb → return knob)
        §DR01:atmo           atmospheres: presets · bed engine (drone/sub/static/drive/reverb) · LFOs · panel · rollAtmosphere · driftAtmosphere (smooth mood-to-mood glide)
        §DR01:voices         drum voices (kick/snare/hat/clap/rim/tom/metal/…) + per-hit FX chain
-       §DR01:engine         TECHNO state + regen() generator + scheduleStep() playback
+       §DR01:engine         TECHNO state + programHitFx() shared fx-coat pass + regen() generator + reshadeFx() + scheduleStep() playback
        §DR01:state          asgGetDrumState / asgSetDrumState (save/load round-trip)
        §DR01:ui             lanes · step grid · per-hit fx panel · atmosphere panel · page bar
        §DR01:song           makeDrArc · composeDrSong (publishes asgDrumRhythm) · auto-progression
@@ -7538,6 +7538,87 @@ function makeTechnoPage() {
   TECHNO_FX_FIELDS.forEach(f => pg[f] = laneMap());
   return pg;
 }
+
+// Program the per-hit fx coat (crush/drive/filt/decayMul/pan/prob/send/hitLfo)
+// for whichever steps are ON in `L` (a lane-key → step-array map), shaped by
+// `dub` (dub style leans crushed/wetter/wider). Pure function of the pattern +
+// style — never touches which steps are on. Shared by regen() (which rolls a
+// fresh pattern, then calls this) and TECHNO.reshadeFx() (which re-shades the
+// EXISTING pattern's fx coat after an atmosphere switch).
+function programHitFx(L, dub) {
+  const R = () => Math.random();
+  const rng = (lo, hi) => lo + Math.random() * (hi - lo);
+  const pick = a => a[(Math.random() * a.length) | 0];
+  const widePan = () => rng(0.35, 0.8) * (R() < 0.5 ? -1 : 1);
+  const Z = () => new Array(COLS).fill(0);
+  const fx = {};
+  TECHNO_FX_FIELDS.forEach(f => { fx[f] = {}; });
+  TECHNO_LANE_KEYS.forEach(k => {
+    fx.ptch[k] = Z(); fx.snap[k] = Z(); fx.drive[k] = Z(); fx.filt[k] = Z();
+    fx.crush[k] = Z(); fx.pan[k] = Z(); fx.send[k] = Z();
+    fx.decayMul[k] = new Array(COLS).fill(1);
+    fx.prob[k]     = new Array(COLS).fill(1);
+    fx.hitLfo[k]   = new Array(COLS).fill(null);
+  });
+  const setLfo = (k, c, param, rate, depth, shape = 'sine') => {
+    const m = fx.hitLfo[k][c] || (fx.hitLfo[k][c] = {});
+    m[param] = { rate, depth, shape };
+  };
+
+  for (let c = 0; c < COLS; c++) {
+    if (L.kick1[c]) { fx.decayMul.kick1[c] = rng(1.15, 1.45); fx.filt.kick1[c] = rng(-0.30, -0.10); }
+    if (L.kick2[c]) {
+      fx.decayMul.kick2[c] = rng(1.2, 1.6);
+      fx.ptch.kick2[c] = pick([-2, -1, 0]);
+      if (dub) fx.filt.kick2[c] = rng(-0.35, -0.15);
+    }
+    if (L.clap[c]) fx.decayMul.clap[c] = rng(1.1, 1.4);
+    if (L.chat[c]) {
+      fx.pan.chat[c] = rng(0.15, 0.5) * (c % 4 === 1 ? -1 : 1);
+      if (dub) fx.crush.chat[c] = rng(0.15, 0.40);
+      fx.filt.chat[c] = dub ? rng(-0.55, -0.25) : rng(-0.35, -0.05); fx.prob.chat[c] = rng(0.60, 0.92);
+    }
+    if (L.ohat[c]) { fx.pan.ohat[c] = widePan() * 0.5; fx.decayMul.ohat[c] = rng(1.1, 1.5); fx.filt.ohat[c] = rng(-0.25, 0); }
+    if (L.rim[c]) { fx.pan.rim[c] = widePan(); fx.ptch.rim[c] = pick([-5, -3, 0, 3, 5, 7]); fx.prob.rim[c] = rng(0.6, 1.0); }
+    if (L.ride[c]) { fx.pan.ride[c] = widePan(); fx.decayMul.ride[c] = rng(1.2, 1.8); fx.filt.ride[c] = rng(-0.2, 0.1); fx.prob.ride[c] = rng(0.6, 0.9); }
+    if (L.tomH[c]) { fx.ptch.tomH[c] = pick([0, 2, 3]); fx.pan.tomH[c] = rng(0.2, 0.5); }
+    if (L.tomM[c]) { fx.ptch.tomM[c] = pick([-2, 0, 2]); }
+    if (L.tomL[c]) { fx.ptch.tomL[c] = pick([-4, -2, 0]); fx.pan.tomL[c] = rng(-0.5, -0.2); fx.decayMul.tomL[c] = rng(1.2, 1.6); }
+    if (L.snr2[c]) { fx.pan.snr2[c] = widePan() * 0.6; fx.crush.snr2[c] = rng(0.1, 0.3); fx.prob.snr2[c] = rng(0.5, 0.85); }
+    if (L.shkr[c]) fx.pan.shkr[c] = widePan() * 0.7;
+    if (L.cow[c]) { fx.ptch.cow[c] = pick([-3, 0, 3]); fx.pan.cow[c] = rng(-0.4, 0.4); fx.crush.cow[c] = rng(0.1, 0.3); }
+    if (L.crash1[c]) { fx.decayMul.crash1[c] = rng(1.2, 1.8); fx.pan.crash1[c] = rng(-0.3, 0.3); }
+  }
+
+  // Dub throws — feed sparse accents into the dub space (the classic dub move).
+  // Claps/snares/rim/open-hats get echoed; the kick & sub stay bone dry. Heavier
+  // on dub atmospheres; the header dub knob sets how loud the wet returns.
+  {
+    const sendBias = dub ? 1.0 : 0.6;
+    for (let c = 0; c < COLS; c++) {
+      if (L.clap[c] && R() < 0.6 * sendBias)  fx.send.clap[c] = rng(0.30, 0.60);
+      if (L.snr2[c] && R() < 0.55 * sendBias) fx.send.snr2[c] = rng(0.30, 0.60);
+      if (L.rim[c]  && R() < 0.30 * sendBias) fx.send.rim[c]  = rng(0.20, 0.45);
+      if (L.ohat[c] && R() < 0.30 * sendBias) fx.send.ohat[c] = rng(0.15, 0.40);
+      if (L.ride[c] && R() < 0.25 * sendBias) fx.send.ride[c] = rng(0.15, 0.35);
+    }
+  }
+
+  // Slow fluid movement — Slink/Hypnus-style 'water' LFOs wander the filter &
+  // pan of the atmospheric lanes so the bed never sits still. Aperiodic drift
+  // (see _waterLfoBuffer) at sub-0.15Hz reads as an underwater current rather
+  // than a wobble. Dub leans wetter/wider.
+  const firstOf = k => L[k].findIndex(v => v > 0);
+  const driftLanes = ['chat', 'ohat', 'ride', 'rim', 'shkr'];
+  const panScale = dub ? 0.9 : 0.65;
+  driftLanes.forEach(k => {
+    const c = firstOf(k); if (c < 0) return;
+    if (R() < 0.7) setLfo(k, c, 'filt', rng(0.03, 0.12), rng(0.25, 0.50), 'water');
+    if (R() < 0.6) setLfo(k, c, 'pan',  rng(0.03, 0.10), rng(0.4, 0.8) * panScale, 'water');
+  });
+
+  return fx;
+}
 const TECHNO = {
   on: true,
   style: 'techno_deep',          // derived from the atmosphere (drum + grid-mood plumbing)
@@ -7585,24 +7666,6 @@ const TECHNO = {
       const nRoll = busy < 0.6 ? pick([0, 1, 1]) : busy < 0.75 ? pick([1, 1, 2]) : (dub ? pick([2, 3, 3]) : pick([1, 2, 2]));
       for (let i = 0; i < nRoll; i++) this.laneLen[pick(rollable)] = pick([7, 9, 11, 13, 15]);
     }
-
-    // Fresh per-hit fx maps. Generation programs every Machinedrum-style control
-    // (pitch / decay / snap / drive / filter / crush / pan / probability / per-hit
-    // LFO) so the groove arrives already shaped — dark, spacious and minimal.
-    const fx = {};
-    TECHNO_FX_FIELDS.forEach(f => { fx[f] = {}; });
-    TECHNO_LANE_KEYS.forEach(k => {
-      fx.ptch[k] = Z(); fx.snap[k] = Z(); fx.drive[k] = Z(); fx.filt[k] = Z();
-      fx.crush[k] = Z(); fx.pan[k] = Z(); fx.send[k] = Z();
-      fx.decayMul[k] = new Array(COLS).fill(1);
-      fx.prob[k]     = new Array(COLS).fill(1);
-      fx.hitLfo[k]   = new Array(COLS).fill(null);
-    });
-    const setLfo = (k, c, param, rate, depth, shape = 'sine') => {
-      const m = fx.hitLfo[k][c] || (fx.hitLfo[k][c] = {});
-      m[param] = { rate, depth, shape };
-    };
-    const widePan = () => rng(0.35, 0.8) * (R() < 0.5 ? -1 : 1);
 
     // ── Song context (shared rhythmic DNA + section role) ─────────────────
     // In song mode every page shares one euclidean "DNA" and a global rotation,
@@ -7751,58 +7814,10 @@ const TECHNO = {
       for (let c = 0; c < rlen; c++) if (eu[(c + rot) % rlen]) L[rl][c] = 0.38 + R() * 0.3;
     });
 
-    // ── Per-hit fx programming — dark & spacious; exercises every control ──────
-    for (let c = 0; c < COLS; c++) {
-      if (L.kick1[c]) { fx.decayMul.kick1[c] = rng(1.15, 1.45); fx.filt.kick1[c] = rng(-0.30, -0.10); }
-      if (L.kick2[c]) {
-        fx.decayMul.kick2[c] = rng(1.2, 1.6);
-        fx.ptch.kick2[c] = pick([-2, -1, 0]);
-        if (dub) fx.filt.kick2[c] = rng(-0.35, -0.15);
-      }
-      if (L.clap[c]) fx.decayMul.clap[c] = rng(1.1, 1.4);
-      if (L.chat[c]) {
-        fx.pan.chat[c] = rng(0.15, 0.5) * (c % 4 === 1 ? -1 : 1);
-        if (dub) fx.crush.chat[c] = rng(0.15, 0.40);
-        fx.filt.chat[c] = dub ? rng(-0.55, -0.25) : rng(-0.35, -0.05); fx.prob.chat[c] = rng(0.60, 0.92);
-      }
-      if (L.ohat[c]) { fx.pan.ohat[c] = widePan() * 0.5; fx.decayMul.ohat[c] = rng(1.1, 1.5); fx.filt.ohat[c] = rng(-0.25, 0); }
-      if (L.rim[c]) { fx.pan.rim[c] = widePan(); fx.ptch.rim[c] = pick([-5, -3, 0, 3, 5, 7]); fx.prob.rim[c] = rng(0.6, 1.0); }
-      if (L.ride[c]) { fx.pan.ride[c] = widePan(); fx.decayMul.ride[c] = rng(1.2, 1.8); fx.filt.ride[c] = rng(-0.2, 0.1); fx.prob.ride[c] = rng(0.6, 0.9); }
-      if (L.tomH[c]) { fx.ptch.tomH[c] = pick([0, 2, 3]); fx.pan.tomH[c] = rng(0.2, 0.5); }
-      if (L.tomM[c]) { fx.ptch.tomM[c] = pick([-2, 0, 2]); }
-      if (L.tomL[c]) { fx.ptch.tomL[c] = pick([-4, -2, 0]); fx.pan.tomL[c] = rng(-0.5, -0.2); fx.decayMul.tomL[c] = rng(1.2, 1.6); }
-      if (L.snr2[c]) { fx.pan.snr2[c] = widePan() * 0.6; fx.crush.snr2[c] = rng(0.1, 0.3); fx.prob.snr2[c] = rng(0.5, 0.85); }
-      if (L.shkr[c]) fx.pan.shkr[c] = widePan() * 0.7;
-      if (L.cow[c]) { fx.ptch.cow[c] = pick([-3, 0, 3]); fx.pan.cow[c] = rng(-0.4, 0.4); fx.crush.cow[c] = rng(0.1, 0.3); }
-      if (L.crash1[c]) { fx.decayMul.crash1[c] = rng(1.2, 1.8); fx.pan.crash1[c] = rng(-0.3, 0.3); }
-    }
-
-    // Dub throws — feed sparse accents into the dub space (the classic dub move).
-    // Claps/snares/rim/open-hats get echoed; the kick & sub stay bone dry. Heavier
-    // on dub atmospheres; the header dub knob sets how loud the wet returns.
-    {
-      const sendBias = dub ? 1.0 : 0.6;
-      for (let c = 0; c < COLS; c++) {
-        if (L.clap[c] && R() < 0.6 * sendBias)  fx.send.clap[c] = rng(0.30, 0.60);
-        if (L.snr2[c] && R() < 0.55 * sendBias) fx.send.snr2[c] = rng(0.30, 0.60);
-        if (L.rim[c]  && R() < 0.30 * sendBias) fx.send.rim[c]  = rng(0.20, 0.45);
-        if (L.ohat[c] && R() < 0.30 * sendBias) fx.send.ohat[c] = rng(0.15, 0.40);
-        if (L.ride[c] && R() < 0.25 * sendBias) fx.send.ride[c] = rng(0.15, 0.35);
-      }
-    }
-
-    // Slow fluid movement — Slink/Hypnus-style 'water' LFOs wander the filter &
-    // pan of the atmospheric lanes so the bed never sits still. Aperiodic drift
-    // (see _waterLfoBuffer) at sub-0.15Hz reads as an underwater current rather
-    // than a wobble. Dub leans wetter/wider.
-    const firstOf = k => L[k].findIndex(v => v > 0);
-    const driftLanes = ['chat', 'ohat', 'ride', 'rim', 'shkr'];
-    const panScale = dub ? 0.9 : 0.65;
-    driftLanes.forEach(k => {
-      const c = firstOf(k); if (c < 0) return;
-      if (R() < 0.7) setLfo(k, c, 'filt', rng(0.03, 0.12), rng(0.25, 0.50), 'water');
-      if (R() < 0.6) setLfo(k, c, 'pan',  rng(0.03, 0.10), rng(0.4, 0.8) * panScale, 'water');
-    });
+    // Per-hit fx coat (crush/drive/filt/decayMul/pan/prob/send/hitLfo) — shared
+    // with reshadeFx() below, which re-runs this same pass on an EXISTING
+    // pattern after an atmosphere switch (see programHitFx).
+    const fx = programHitFx(L, dub);
 
     // ── Industrial / dark accents — rare crushed, distorted metallic or sub-impact
     // hits that punctuate the track at sparse moments. Placed after the fx pass so
@@ -7823,13 +7838,23 @@ const TECHNO = {
           fx.ptch[lane][c]     = pick([-7, -5, -3, 0]);   // less octave-down boom
           fx.filt[lane][c]     = rng(-0.55, -0.25);
           fx.decayMul[lane][c] = rng(1.1, 1.45);
-          fx.pan[lane][c]      = widePan();
+          fx.pan[lane][c]      = rng(0.35, 0.8) * (R() < 0.5 ? -1 : 1);   // widePan, inlined — programHitFx owns the shared copy
         }
       }
     }
 
     // Commit pattern + fx into the current page.
     TECHNO_LANE_KEYS.forEach(k => { this[k] = L[k]; });
+    TECHNO_FX_FIELDS.forEach(f => { this[f] = fx[f]; });
+  },
+
+  // Re-shade the CURRENT page's fx coat to match `this.style` without touching
+  // which steps are on — used when switching atmosphere so old dub grit (heavy
+  // chat crush, wide sends, etc.) doesn't linger under a style it was never
+  // shaped for, or vice versa. The pattern itself (and any hand-tuned per-hit
+  // edits to *which steps are on*) is preserved; only the timbral coat moves.
+  reshadeFx() {
+    const fx = programHitFx(this, this.style === 'techno_dub');
     TECHNO_FX_FIELDS.forEach(f => { this[f] = fx[f]; });
   },
 
@@ -8619,9 +8644,12 @@ document.addEventListener('keydown', e => {
 
 document.getElementById('dr-playBtn').addEventListener('click', () => S.playing ? stopSeq() : startSeq());
 document.getElementById('dr-styleSelect').addEventListener('change', function () {
-  // Swap the sound character only — dub send + atmosphere bed change live, but the
-  // current page's hits stay put until the user clicks generate.
+  // Swap the sound character — dub send + atmosphere bed change live, and the fx
+  // coat re-shades to fit (so old dub grit doesn't linger under a deep mood) —
+  // but which steps are on stays put until the user clicks generate.
   setAtmosphere(this.value);
+  TECHNO.reshadeFx();
+  renderDrAll();
   populateGridMoods();         // grid mood options follow the atmosphere's drum style
 });
 // ── Song composition ────────────────────────────────────────────────────────
