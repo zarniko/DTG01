@@ -1036,8 +1036,8 @@
           <option value="tab">system audio</option>
           <option value="mic">mic</option>
           <option value="grid">grid audio</option>
-          <option value="bloom">bloom audio</option>
-          <option value="atmo" selected>atmosphere</option>
+          <option value="bloom" selected>bloom audio</option>
+          <option value="atmo">atmosphere</option>
         </select>
       </div>
       <button class="btn-action" id="gs2-recBtn">capture audio</button>
@@ -4423,7 +4423,7 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   if (genEl) genEl.textContent =
     `grid generate → re-grained as a consonant dyad matched to a ${charLabel} grid `
     + `(${Math.round(bright * 100)}% bright, reverb ${Math.round(reverb * 100)}%). `
-    + `${layerFrag('A (grid → motion):', getA)}. ${layerFrag('B (atmosphere → wash):', getB)}.`;
+    + `${layerFrag('A (grid → motion):', getA)}. ${layerFrag('B (bloom → wash):', getB)}.`;
 };
 
 // Session save/restore — snapshot every granular slider by id, and re-apply by
@@ -12335,7 +12335,10 @@ function ensureCtx() {
 }
 
 window.asgGetBloomStream = async () => {
-  if (!audioCtx) return null;
+  // Build the bloom graph on demand so the capture tap exists even before any
+  // note plays (silent until then) — lets granular B default to bloom and start
+  // capturing immediately, the way the always-on atmosphere bed does.
+  ensureCtx();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
   return bloomStreamDest ? bloomStreamDest.stream : null;
 };
