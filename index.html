@@ -19,8 +19,8 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :focus { outline: none; }
     :focus-visible { outline: none; }
-    .kbnav-focus { outline: none; box-shadow: 0 1px 0 0 var(--accent) !important; }
-    .kbnav-focus.kbnav-edit { box-shadow: 0 2px 0 0 var(--accent) !important; }
+    .kbnav-focus { outline: 1px solid var(--accent) !important; outline-offset: 1px; box-shadow: none !important; }
+    .kbnav-focus.kbnav-edit { outline-width: 2px !important; }
     .kbnav-focus[type="range"] { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 6px; }
     .kbnav-focus.kbnav-edit[type="range"] { outline-width: 2px !important; }
     #ig-grid.kbnav-focus, #ig-spiral-cv.kbnav-focus, #dr-grid.kbnav-focus { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 2px; }
@@ -394,7 +394,7 @@
     .gs-acc-head:hover { color: rgba(255,255,255,0.85); }
     .gs-acc.open > .gs-acc-head { color: rgba(255,255,255,0.85); }
     .gs-acc-label { display: inline-flex; align-items: center; gap: 8px; }
-    .gs-acc-head.kbnav-focus { box-shadow: none !important; }
+    .gs-acc-head.kbnav-focus { box-shadow: none !important; outline: none !important; }
     .gs-acc-head.kbnav-focus .gs-acc-label { box-shadow: 0 1px 0 0 var(--accent) !important; }
     .gs-acc-head.kbnav-focus.kbnav-edit .gs-acc-label { box-shadow: 0 2px 0 0 var(--accent) !important; }
     .gs-acc-chev { display: inline-block; transition: transform .12s; color: rgba(255,255,255,0.35); font-size: 11px; }
@@ -2173,7 +2173,23 @@ function kbHandleKey(e) {
       kbClearHighlight();
       kbMode = 'grid';
       (item.enter || window._igEnterGridNav)?.();
-    } else if (item.el.tagName === 'INPUT' || item.el.tagName === 'SELECT') {
+    } else if (item.el.tagName === 'SELECT') {
+      // Open the native dropdown so Enter visibly expands the menu (the native list
+      // then handles the pick). Falls back to inline arrow-cycling edit mode when
+      // showPicker isn't available. Release focus once a choice is made so kbnav
+      // arrow navigation resumes cleanly afterward.
+      const sel = item.el;
+      let opened = false;
+      if (typeof sel.showPicker === 'function') {
+        try {
+          sel.focus({ preventScroll: true });
+          sel.showPicker();
+          sel.addEventListener('change', function _b() { sel.removeEventListener('change', _b); sel.blur(); }, { once: true });
+          opened = true;
+        } catch (_) { opened = false; }
+      }
+      if (!opened) { kbMode = 'edit'; kbRepeat = 0; kbShowHighlight(); }
+    } else if (item.el.tagName === 'INPUT') {
       kbMode = 'edit'; kbRepeat = 0; kbShowHighlight();
     } else {
       item.el.click();
@@ -4025,7 +4041,7 @@ window._gsHideHelp = hideHelp;
 
     bhCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     bhCtx.clearRect(0, 0, BW, BH);
-    bhCtx.fillStyle = '#000';
+    bhCtx.fillStyle = '#0000aa';   // match the UI background blue (was black)
     bhCtx.fillRect(0, 0, BW, BH);
 
     const { bass, mid, rms } = getAudioLevels();
@@ -4087,7 +4103,7 @@ window._gsHideHelp = hideHelp;
       bhCtx.fillRect(pt.px - sz * 0.5, pt.py - sz * 0.5, sz, sz);
     }
 
-    bhCtx.fillStyle = '#000';
+    bhCtx.fillStyle = '#000056';   // darker UI blue for the void centre (was black)
     bhCtx.beginPath();
     bhCtx.arc(cx, cy, shadowPx, 0, Math.PI * 2);
     bhCtx.fill();
@@ -6153,7 +6169,7 @@ function ensureCtx() {
     igGlue = audioCtx.createDynamicsCompressor();
     igGlue.threshold.value = -20; igGlue.knee.value = 20; igGlue.ratio.value = 2.5;
     igGlue.attack.value = 0.015; igGlue.release.value = 0.25;
-    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.485;
+    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.0;
     analyser.connect(igSoftShelf);
     igSoftShelf.connect(igGlue); igGlue.connect(igGlueMakeup); igGlueMakeup.connect(igLimiter);
     igLimiter.connect(audioCtx.destination);
@@ -10064,6 +10080,29 @@ $$('randRefresh').addEventListener('click', (e) => {
     if (flangerWet)  flangerWet.gain.setTargetAtTime(FX.flanger, t, 0.03);
     if (resonWet)    resonWet.gain.setTargetAtTime(FX.resonator, t, 0.03);
     if (resonDelay)  resonDelay.delayTime.setTargetAtTime(1 / FX.resonFreq, t, 0.03);
+  }
+
+  // ── Per-generation loudness/harshness leveling ───────────────────────────────
+  // Bright / distorted / resonant / saw-square-FM generations come out harsher AND
+  // louder than warm, dark ones, so generations vary wildly in level. To even that
+  // out WITHOUT lowering the good (warm) ones, estimate this generation's harshness
+  // and — only when it rises above a warm baseline — trim the grid bus a little and
+  // roll a bit more off the highs. Warm gens score ~0 → no change from current.
+  {
+    const cl = v => Math.max(0, Math.min(1, v));
+    // Per-generation spectral factors (these vary per roll; the mood's primary wave
+    // does not, so it isn't used). Baselines are set so the warm/dark "perfect"
+    // settings (~8% dist, dark cutoff, mid resonance) score ~0 and stay at unity.
+    const distN  = cl((gDist - 0.08) / 0.12);          // ≤8% dist scores 0
+    const resN   = cl((gRes - 3.0) / 2.5);             // resonance above mid
+    const cutN   = cl((gCutoff - 700) / 1500);         // per-note filter brightness
+    const lpfN   = cl((gLPF - 10000) / 6000);          // global brightness
+    const harsh  = cl(distN * 0.38 + resN * 0.30 + cutN * 0.20 + lpfN * 0.12);
+    if (audioCtx) {
+      const t2 = audioCtx.currentTime;
+      if (igGlueMakeup) igGlueMakeup.gain.setTargetAtTime(1.0 - harsh * 0.38, t2, 0.10);  // warm 1.0 → harsh ~0.62
+      if (igSoftShelf)  igSoftShelf.gain.setTargetAtTime(-3.5 - harsh * 3.5, t2, 0.10);    // -3.5 → ~-7 dB highs
+    }
   }
 
   // ── Let bloom + granular re-voice complementary to this fresh pattern ──
