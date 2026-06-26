@@ -23,7 +23,10 @@
     .kbnav-focus.kbnav-edit { box-shadow: 0 2px 0 0 var(--accent) !important; }
     .kbnav-focus[type="range"] { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 6px; }
     .kbnav-focus.kbnav-edit[type="range"] { outline-width: 2px !important; }
-    #ig-grid.kbnav-focus, #ig-spiral-cv.kbnav-focus { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 2px; }
+    #ig-grid.kbnav-focus, #ig-spiral-cv.kbnav-focus, #dr-grid.kbnav-focus { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 2px; }
+    /* .dr-seq-group scrolls (overflow-x: auto), which clips the outward outline-offset
+       above — draw the drum grid's focus ring inset instead so it stays visible. */
+    #dr-grid.kbnav-focus { outline-offset: -2px; }
 
 :root {
   --accent: #fff;
@@ -553,8 +556,13 @@
     /* active-cell brightness + glow scale with the hit velocity (--vel set per cell) */
     .dr-cell.on::after { inset: 6px; border-radius: 1px; background: var(--accent); box-shadow: 0 0 calc(5px + 6px * var(--vel, 1)) var(--accent), 0 0 calc(12px + 10px * var(--vel, 1)) var(--accent); opacity: calc(0.32 + 0.53 * var(--vel, 1)); }
     .dr-cell.on.flash::after { animation: flash .15s ease-out; }
+    /* playhead column highlight — mirrors the grid's .cell.ph: a faint tint down
+       the whole column under the playhead, active hits in it glowing brighter */
+    .dr-cell.ph           { background: linear-gradient(rgba(255,255,255,0.07),rgba(255,255,255,0.07)), var(--bg-dark); }
+    .dr-cell.on.ph::after { box-shadow: 0 0 calc(11px + 8px * var(--vel, 1)) var(--accent), 0 0 calc(24px + 14px * var(--vel, 1)) var(--accent); opacity: 1; }
     .dr-cell.muted { filter: brightness(0.5); }
     .dr-cell.sel { outline: 1px solid rgba(255,255,255,0.55); outline-offset: 2px; }
+    .dr-cell.kbd-cursor { outline: 2px dashed var(--accent); outline-offset: 1px; }
     .dr-hint { font-size: 11px; letter-spacing: 1px; color: rgba(255,255,255,0.3); }
     /* per-hit fx — fixed two columns (one on narrow/mobile) */
     .dr-fx-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 22px; align-items: start; }
@@ -2042,6 +2050,10 @@ function buildKbItems(panelId) {
     const grid = document.getElementById(window._igSpiralViewActive?.() ? 'ig-spiral-cv' : 'ig-grid');
     if (grid) items.push({ type: 'grid', el: grid });
   }
+  if (panelId === 'dr-panel') {
+    const dgrid = document.getElementById('dr-grid');
+    if (dgrid) items.push({ type: 'grid', el: dgrid, enter: () => window._drEnterGridNav?.() });
+  }
   items.sort((a, b) => {
     const pos = a.el.compareDocumentPosition(b.el);
     if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
@@ -2095,7 +2107,7 @@ function kbRebuildItems() {
   kbShowHighlight();
 }
 function kbOnPanelSwitch(panelId) {
-  if (kbMode === 'grid') window._igExitGridNav?.();
+  if (kbMode === 'grid') { window._igExitGridNav?.(); window._drExitGridNav?.(); }
   if (!kbActive) return;
   kbClearHighlight();
   kbMode = 'nav';
@@ -2160,7 +2172,7 @@ function kbHandleKey(e) {
     if (item.type === 'grid') {
       kbClearHighlight();
       kbMode = 'grid';
-      window._igEnterGridNav?.();
+      (item.enter || window._igEnterGridNav)?.();
     } else if (item.el.tagName === 'INPUT' || item.el.tagName === 'SELECT') {
       kbMode = 'edit'; kbRepeat = 0; kbShowHighlight();
     } else {
@@ -2259,9 +2271,12 @@ document.getElementById('app-play-btn').addEventListener('click', async () => {
   _perfActive = !_perfActive;
   document.getElementById('app-play-btn').classList.toggle('active', _perfActive);
   if (_perfActive) {
-    // Pick the default techno style (deep), roll a fresh drum arc, and scope the
-    // grid moods to it — then generate the complementary melody across all pages.
-    window.asgTechnoJamInit?.('techno_deep');
+    // Keep whichever atmosphere is currently selected, roll a fresh drum arc, and
+    // scope the grid moods to it — then generate the complementary melody across
+    // all pages. (Was hardcoded to 'techno_deep', which isn't an atmosphere key and
+    // silently fell through to 'monolith' every time — see asgTechnoJamInit below,
+    // which now defaults to the live TECHNO.atmosphere itself.)
+    window.asgTechnoJamInit?.();
     await new Promise(r => setTimeout(r, 40));
     document.getElementById('ig-randRefresh').dispatchEvent(
       new MouseEvent('click', { bubbles: true, shiftKey: true })
@@ -4267,6 +4282,7 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   const style     = info.adsrStyle || '';
   const staccato  = /short|wood|chime|glass|bell/.test(style);
   const sustained = style === 'long' || style === 'bowl';
+  const isForest  = info.mood === 'deep_forest' || info.mood === 'dub_forest';
 
   // Register bias: bright/high grid → granular drops for body; dark/low → lifts for air.
   const goLow = bright > 0.45 || transpose >= 3;
@@ -4284,6 +4300,17 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   const plan = info.granPlan || (() => {
     const pick = a => a[(Math.random() * a.length) | 0];
     const PHI  = 1.618;
+
+    // Forest/dub variation — a fixed octave-down/octave-up dyad (A grounds the
+    // root, B glitters an octave above) instead of the randomly-picked just
+    // interval, with dense, wide, slow grains that read as granular "rain".
+    if (isForest) {
+      const rr = (lo, hi) => lo + Math.random() * (hi - lo);
+      return {
+        A: { pitch: 50,  dens: Math.round(rr(70, 80)), size: Math.round(rr(150, 250)), spread: Math.round(rr(80, 92)) },
+        B: { pitch: 200, dens: Math.round(rr(70, 80)), size: Math.round(rr(150, 250)), spread: Math.round(rr(80, 92)) },
+      };
+    }
     const dna  = window.asgDrumRhythm || null;
     const bpm  = info.bpm || window.asgGetGridState?.().bpm || 120;
     const barDur = (60 / bpm) * 4;                            // one 16-step bar, seconds
@@ -4318,6 +4345,7 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   _gsSetSlider('sizeSlider',   plan.A.size);
   _gsSetSlider('spreadSlider', plan.A.spread);
   _gsSetSlider('pitchDriftSlider', staccato ? 18 : 10);
+  if (isForest) _gsSetSlider('preserveSlider', Math.round(20 + Math.random() * 10));
 
   // Reverb — share grid's space, generously floored for the wash.
   _gsSetSlider('reverbSlider', cl(reverb * 100 + 10, 45, 92));
@@ -4347,6 +4375,20 @@ window.asgOnGridGenerateGranular = (info = {}) => {
     _gsSetSlider('dlyProbSlider', staccato ? 45 : sustained ? 62 : 55);
   } else {
     _gsSetSlider('dlyMixSlider', 0);
+  }
+
+  // ── Texture variation (bounded — keeps the hypnotic, evolving character) ──
+  // Position, reverse grains, head-jump, resonance and the two scan-head rates
+  // were left static every generate; nudging them in tight ranges gives A genuine
+  // motion without tipping into chaos.
+  {
+    const R = Math.random, rr = (lo, hi) => lo + R() * (hi - lo);
+    _gsSetSlider('posSlider',       Math.round(rr(38, 62)));                   // sample point wanders off-centre
+    _gsSetSlider('revProbSlider',   R() < 0.30 ? Math.round(rr(8, 22)) : 0);  // occasional reverse-grain shimmer
+    _gsSetSlider('headJumpSlider',  R() < 0.15 ? Math.round(rr(4, 12)) : 0);  // rare glitch scatter
+    _gsSetSlider('filterResSlider', R() < 0.40 ? Math.round(rr(10, 35)) : 10);// light resonant colour
+    _gsSetSlider('head1Rate',       Math.round(rr(15, 45)));                   // forward scan speed
+    _gsSetSlider('head2Rate',       Math.round(rr(-30, -10)));                 // reverse scan speed
   }
 
   info.granPlan = plan;               // hand the coordinated plan to B
@@ -5421,6 +5463,7 @@ window._gs2OnGridGenerate = (info = {}) => {
   const staccato  = /short|wood|chime|glass|bell/.test(style);
   const sustained = style === 'long' || style === 'bowl';
   const goLow = bright > 0.45 || transpose >= 3;
+  const isForest  = info.mood === 'deep_forest' || info.mood === 'dub_forest';
 
   // Pitch / density / size / spread come from A's coordinated plan (see GS01's
   // asgOnGridGenerateGranular) so the two engines form one consonant, mutually
@@ -5439,6 +5482,13 @@ window._gs2OnGridGenerate = (info = {}) => {
   _gsSetSlider('spreadSlider', planB.spread);
   _gsSetSlider('pitchDriftSlider', staccato ? 22 : 14);
   _gsSetSlider('reverbSlider', cl(reverb * 100 + 6, 40, 88));
+  // B sits ~20% under its old default (0.75×→0.60×) so it supports the wash
+  // rather than overpowering synthesis A. Performer can still ride it up after.
+  _gsSetSlider('volSlider', 60);
+  if (isForest) {
+    _gsSetSlider('preserveSlider', Math.round(20 + Math.random() * 10));
+    _gsSetSlider('volSlider', 30);   // octave-up glitches sit even lower in the mix
+  }
 
   // Envelope shape, size scatter, filter — mirror A's logic (B takes opposite octave).
   _gsSetSlider('shapeSlider',      staccato ? 30 : sustained ? 68 : 50);
@@ -5459,6 +5509,17 @@ window._gs2OnGridGenerate = (info = {}) => {
     _gsSetSlider('dlyProbSlider', staccato ? 40 : sustained ? 58 : 50);
   } else {
     _gsSetSlider('dlyMixSlider', 0);
+  }
+
+  // ── Texture variation (bounded, gentler than A — B is the background wash) ──
+  {
+    const R = Math.random, rr = (lo, hi) => lo + R() * (hi - lo);
+    _gsSetSlider('posSlider',       Math.round(rr(40, 60)));
+    _gsSetSlider('revProbSlider',   R() < 0.35 ? Math.round(rr(10, 28)) : 0);  // washes take reverse grains nicely
+    _gsSetSlider('headJumpSlider',  R() < 0.10 ? Math.round(rr(3, 8)) : 0);
+    _gsSetSlider('filterResSlider', R() < 0.35 ? Math.round(rr(8, 28)) : 10);
+    _gsSetSlider('head1Rate',       Math.round(rr(10, 35)));
+    _gsSetSlider('head2Rate',       Math.round(rr(-28, -8)));
   }
 };
 
@@ -5582,7 +5643,7 @@ const ATMOSPHERES = {
   // minimal drone-techno: bare deep kit under a big sustained pad
   monolith: {
     label: 'monolith', drumStyle: 'techno_deep', dubSend: 0.16, busy: 0.8,
-    audio: { master: 0.20,
+    audio: { master: 0.175,
       drone: { level: 0.60, type: 'sawtooth', intervals: [1, 1.5, 2],   cutoff: 700,  drift: 0.55, driftRate: 0.04 },
       sub:   { level: 0.40 },
       noise: { level: 0.004, type: 'highpass', freq: 6000, q: 0.5 },
@@ -5591,7 +5652,7 @@ const ATMOSPHERES = {
   // underwater dub: sparse, delay-drenched, deep sub, soft watery static
   submerged: {
     label: 'submerged', drumStyle: 'techno_dub', dubSend: 0.34, busy: 0.40,
-    audio: { master: 0.22,
+    audio: { master: 0.19,
       drone: { level: 0.50, type: 'sawtooth', intervals: [0.5, 1, 1.5], cutoff: 520,  drift: 0.50, driftRate: 0.05 },
       sub:   { level: 0.60 },
       noise: { level: 0.008, type: 'lowpass',  freq: 1400, q: 0.7 },
@@ -5600,7 +5661,7 @@ const ATMOSPHERES = {
   // industrial / lo-fi: gritty, saturated, a bandpassed static bed pushed hard
   corrosion: {
     label: 'corrosion', drumStyle: 'techno_deep', dubSend: 0.18, busy: 0.45,
-    audio: { master: 0.18,
+    audio: { master: 0.16,
       drone: { level: 0.45, type: 'sawtooth', intervals: [1, 1.5, 2],   cutoff: 900,  drift: 0.40, driftRate: 0.06 },
       sub:   { level: 0.45 },
       noise: { level: 0.005, type: 'bandpass', freq: 2500, q: 0.8 },
@@ -5609,7 +5670,7 @@ const ATMOSPHERES = {
   // spacey / cavernous: airy high pad, long reverb tail, sparse hiss
   expanse: {
     label: 'expanse', drumStyle: 'techno_dub', dubSend: 0.30, busy: 0.7,
-    audio: { master: 0.22,
+    audio: { master: 0.19,
       drone: { level: 0.50, type: 'triangle', intervals: [1, 2, 3],     cutoff: 1200, drift: 0.60, driftRate: 0.03 },
       sub:   { level: 0.30 },
       noise: { level: 0.006, type: 'highpass', freq: 8000, q: 0.5 },
@@ -6092,7 +6153,7 @@ function ensureCtx() {
     igGlue = audioCtx.createDynamicsCompressor();
     igGlue.threshold.value = -20; igGlue.knee.value = 20; igGlue.ratio.value = 2.5;
     igGlue.attack.value = 0.015; igGlue.release.value = 0.25;
-    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.65;
+    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.485;
     analyser.connect(igSoftShelf);
     igSoftShelf.connect(igGlue); igGlue.connect(igGlueMakeup); igGlueMakeup.connect(igLimiter);
     igLimiter.connect(audioCtx.destination);
@@ -8073,13 +8134,13 @@ updateDrumsToggle();
 // (snr/tom keys retain their original snr2/tomL identities; just relabelled.)
 const DR_LANES = [
   { key: 'kick1',  label: 'kick',   vel: 0.95, gain: 0.95, play: (w, v, p) => drumKick(w, v, p) },
-  { key: 'snr2',   label: 'snr',    vel: 0.85, gain: 0.32, play: (w, v, p) => drumSnare(w, v, p, { electronic: true }) },
-  { key: 'clap',   label: 'clap',   vel: 1.0,  gain: 0.42, play: (w, v, p) => drumClap(w, v, p) },
-  { key: 'rim',    label: 'rim',    vel: 0.8,  gain: 0.5,  play: (w, v, p) => drumRim(w, v, p) },
-  { key: 'chat',   label: 'hat c',  vel: 0.8,  gain: 0.16, play: (w, v, p) => drumHat(w, v, false, p) },
-  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.24, play: (w, v, p) => drumHat(w, v, true, p) },
+  { key: 'snr2',   label: 'snr',    vel: 0.85, gain: 0.36, play: (w, v, p) => drumSnare(w, v, p, { electronic: true }) },
+  { key: 'clap',   label: 'clap',   vel: 1.0,  gain: 0.47, play: (w, v, p) => drumClap(w, v, p) },
+  { key: 'rim',    label: 'rim',    vel: 0.8,  gain: 0.56, play: (w, v, p) => drumRim(w, v, p) },
+  { key: 'chat',   label: 'hat c',  vel: 0.8,  gain: 0.18, play: (w, v, p) => drumHat(w, v, false, p) },
+  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.27, play: (w, v, p) => drumHat(w, v, true, p) },
   { key: 'tomL',   label: 'tom',    vel: 0.9,  gain: 0.38, play: (w, v, p) => drumTom(w, v, p, 120) },
-  { key: 'shkr',   label: 'shkr',   vel: 0.7,  gain: 0.3,  play: (w, v, p) => drumShaker(w, v, p) },
+  { key: 'shkr',   label: 'shkr',   vel: 0.7,  gain: 0.34, play: (w, v, p) => drumShaker(w, v, p) },
 ];
 const drCellEls = DR_LANES.map(() => new Array(COLS));
 const drPips = [];
@@ -8152,6 +8213,8 @@ function renderDrCell(li, c) {
   el.classList.toggle('roll-off', c >= len);
   el.classList.toggle('roll-end', c === len);
   el.classList.toggle('sel', li === selDrLi && c === selDrC);
+  el.classList.toggle('ph', c === S.step);   // playhead column highlight (shared S.step)
+  el.classList.toggle('kbd-cursor', drGridNavActive && li === curDrLi && c === curDrC);
 }
 function renderDrAll() {
   for (let li = 0; li < DR_LANES.length; li++)
@@ -8207,6 +8270,8 @@ function toggleDrCell(li, c) {
    it (enabling the fx panel below); click the selected cell once more to
    delete it. Mirrors the grid's activate/select/deactivate click cycle. */
 let selDrLi = -1, selDrC = -1;
+// keyboard-nav drum-grid cursor (mirrors the grid tab's curR/curC)
+let drGridNavActive = false, curDrLi = 0, curDrC = 0;
 const dr$ = id => document.getElementById(id);
 
 /* ── Per-hit parameters (Machinedrum-inspired) ────────────────────────────
@@ -8716,6 +8781,45 @@ document.getElementById('dr-grid').addEventListener('mousedown', e => {
   }
 });
 
+// ── Keyboard-nav drum-grid cursor — entered from the kbnav grid item (Enter on
+// the step grid), arrow to move, Enter to place/select/remove, Esc to leave.
+// Mirrors the grid tab's cell-cursor (gridNavActive / curR / curC). ──
+window._drEnterGridNav = () => { drGridNavActive = true; renderDrAll(); };
+window._drExitGridNav  = () => { drGridNavActive = false; renderDrAll(); };
+document.addEventListener('keydown', e => {
+  if (!drGridNavActive) return;
+  if (document.getElementById('dr-panel').style.display === 'none') return;
+  const nLanes = DR_LANES.length;
+  if (e.key === 'ArrowUp')         { e.preventDefault(); curDrLi = (curDrLi === 0) ? nLanes - 1 : curDrLi - 1; renderDrAll(); }
+  else if (e.key === 'ArrowDown')  { e.preventDefault(); curDrLi = (curDrLi === nLanes - 1) ? 0 : curDrLi + 1; renderDrAll(); }
+  else if (e.key === 'ArrowLeft')  { e.preventDefault(); curDrC = (curDrC === 0) ? COLS - 1 : curDrC - 1; renderDrAll(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); curDrC = (curDrC === COLS - 1) ? 0 : curDrC + 1; renderDrAll(); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const lane = DR_LANES[curDrLi];
+    if (TECHNO[lane.key][curDrC]) {
+      if (selDrLi === curDrLi && selDrC === curDrC) { toggleDrCell(curDrLi, curDrC); clearDrSel(); }
+      else selectDrNote(curDrLi, curDrC);
+    } else {
+      toggleDrCell(curDrLi, curDrC);
+    }
+    renderDrAll();
+  }
+  else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    if (TECHNO[DR_LANES[curDrLi].key][curDrC]) {
+      toggleDrCell(curDrLi, curDrC);
+      if (selDrLi === curDrLi && selDrC === curDrC) clearDrSel();
+    }
+    renderDrAll();
+  }
+  else if (e.key === 'Escape') {
+    e.preventDefault();
+    window._drExitGridNav();
+    window._kbNavReturnFromGrid?.();
+  }
+});
+
 document.addEventListener('mousedown', e => {
   if (selDrLi < 0) return;
   if (document.getElementById('dr-panel').style.display === 'none') return;
@@ -8812,6 +8916,11 @@ function generateDrPoem(p) {
 function composeDrSong() {
   const pick = a => a[(Math.random() * a.length) | 0];
   const rnd  = (lo, hi) => lo + Math.random() * (hi - lo);
+  // Roll a fresh atmosphere bed too (drone/sub/static/reverb balance + slow
+  // tempo-locked LFOs) so the background evolves per song. rollAtmosphere leaves
+  // the overall bed master level alone, so this stays minimal — it varies the
+  // internal balance + movement, not the loudness.
+  rollAtmosphere();
   // flavour shifts the whole character: hypnotic (steady), sparse (stripped),
   // rolling (tom-driven fills), dubby (sub + cowbell), percussive (busier perc).
   const flavor = pick(['hypnotic', 'sparse', 'rolling', 'dubby', 'percussive']);
@@ -9074,6 +9183,7 @@ function tick() {
 }
 
 function advancePlayhead(step, gStep = step) {
+  if (!S.playing) return;   // ignore callbacks scheduled before stop (avoids a lingering lit column)
   const prevStep = S.step;
   S.step = step;
   let hasNote = false;
@@ -9093,10 +9203,14 @@ function advancePlayhead(step, gStep = step) {
   pips[step]?.classList.add('lit');
   updateSelLabel();
 
-  // drum-machine panel — playhead pip + per-lane flash, independent of grid visibility
-  if (prevStep >= 0 && prevStep !== step) drPips[prevStep]?.classList.remove('lit');
+  // drum-machine panel — playhead pip + column highlight + per-lane flash, independent of grid visibility
+  if (prevStep >= 0 && prevStep !== step) {
+    drPips[prevStep]?.classList.remove('lit');
+    for (let li = 0; li < DR_LANES.length; li++) renderDrCell(li, prevStep);   // clear ph on the column we left
+  }
   drPips[step]?.classList.add('lit');
   for (let li = 0; li < DR_LANES.length; li++) {
+    renderDrCell(li, step);   // light the playhead column (ph)
     const k = DR_LANES[li].key;
     const len = TECHNO.laneLen[k] || 16;
     const s = len >= 16 ? step : (gStep % len);   // rolling lanes flash their own playing cell
@@ -9133,6 +9247,7 @@ function stopSeq() {
   playBtn.textContent = 'start';
   playBtn.classList.remove('playing');
   drPips.forEach(p => p.classList.remove('lit'));
+  renderDrAll();   // clear the playhead column highlight on the drum grid
   _syncDrPlayBtn();
   if (progressActive) stopProgression();
 }
@@ -9695,6 +9810,28 @@ const MOOD_PROFILES = {
     voices: ['sine','triangle','fm','air','string'],
     transposeRange: [-5, -1],
   },
+  // deep · forest — hypnotic, organic, ritual-feeling; modal/raga scales, wood/
+  // bowl/air voices, wider per-hit cut+pan drift. Pairs naturally with Corrosion.
+  deep_forest: {
+    style: 'techno_deep', label: 'forest',
+    scales: ['phrygian','locrian','raga_bhairav'],
+    bpmRange: [124, 128],
+    strategies: ['anchor-scatter','euclidean'],
+    atkRange: [0.05, 0.20], cutoffRange: [260, 820],
+    lpfRange: [6500, 11000],
+    delayRange: [0.30, 0.48], reverbRange: [0.55, 0.78],
+    distChance: 0.05, distRange: [0.03, 0.10],
+    tremoloChance: 0, tremoloRange: [0, 0],
+    adsrChance: 1.0, adsrStyle: 'bowl',
+    resRange: [1.6, 3.6],
+    lfoParams: ['cut','cut','pan','pan'], lfoChance: 0.80, lfoRateRange: [0.05, 0.22],
+    dstShapes: ['soft'], dstShapeChance: 0.12,
+    ratchetChance: 0.04,
+    voiceCountRange: [1, 1],
+    bassDroneChance: 0.0, ghostChance: 0.58,
+    voices: ['wood','bowl','air'],
+    transposeRange: [-7, -2],
+  },
   // ════ DUB TECHNO — smoky, delay-drenched, narcotic ════
   // dub · chord — classic smoky chord stabs drowned in delay + reverb
   dub_chord: {
@@ -9738,13 +9875,35 @@ const MOOD_PROFILES = {
     voices: ['sine','fm','triangle','air','string'],
     transposeRange: [-7, -2],
   },
+  // dub · forest — same hypnotic/ritual flavour as deep_forest, slower and
+  // wetter; pairs naturally with Submerged. Drives the granular forest plan.
+  dub_forest: {
+    style: 'techno_dub', label: 'forest',
+    scales: ['phrygian','locrian','raga_bhairav'],
+    bpmRange: [123, 127],
+    strategies: ['anchor-scatter','anchor-scatter'],
+    atkRange: [0.08, 0.26], cutoffRange: [220, 680],
+    lpfRange: [5500, 9500],
+    delayRange: [0.38, 0.56], reverbRange: [0.62, 0.85],
+    distChance: 0.0, distRange: [0, 0],
+    tremoloChance: 0, tremoloRange: [0, 0],
+    adsrChance: 1.0, adsrStyle: 'bowl',
+    resRange: [1.6, 3.4],
+    lfoParams: ['cut','cut','rev','pan'], lfoChance: 0.78, lfoRateRange: [0.03, 0.16],
+    dstShapes: ['soft'], dstShapeChance: 0.0,
+    ratchetChance: 0.0,
+    voiceCountRange: [1, 1],
+    bassDroneChance: 0.0, ghostChance: 0.62,
+    voices: ['wood','bowl','air'],
+    transposeRange: [-8, -3],
+  },
 };
 
-// Each drum style maps to its 2 complementary grid melodic moods (first = default).
+// Each drum style maps to its complementary grid melodic moods (first = default).
 // The grid mood dropdown is scoped to these via populateGridMoods().
 const STYLE_GRID_MOODS = {
-  techno_deep:  ['deep_stab', 'deep_pad'],
-  techno_dub:   ['dub_chord', 'dub_drift'],
+  techno_deep:  ['deep_stab', 'deep_pad', 'deep_forest'],
+  techno_dub:   ['dub_chord', 'dub_drift', 'dub_forest'],
 };
 
 // Song-to-song mood drift removed — grid moods are now scoped to the drum
@@ -9773,7 +9932,7 @@ populateGridMoods();
 // Bridge for the app-level ▲ "full jam" button: set the master techno style,
 // turn drums on, sync both the drum + grid dropdowns, and roll a fresh 8-page
 // drum arc. The triangle then fires grid shift-generate for complementary melody.
-window.asgTechnoJamInit = (a = 'monolith') => {
+window.asgTechnoJamInit = (a = TECHNO.atmosphere) => {
   // accept an atmosphere name, or map a legacy deep/dub style to one
   const name = ATMOSPHERES[a] ? a : (a === 'techno_dub' ? 'submerged' : 'monolith');
   setAtmosphere(name);
@@ -9915,6 +10074,16 @@ $$('randRefresh').addEventListener('click', (e) => {
   };
   window.asgOnGridGenerate?.(_genInfo);
   window.asgOnGridGenerateGranular?.(_genInfo);
+
+  // ── Forest mood: pin the live dub send into its 30–40% target band ─────
+  // regardless of which atmosphere is active (only Submerged/Expanse default
+  // there; Corrosion's 18% doesn't), since the forest flavour wants that
+  // wash present either way.
+  if (mood === 'deep_forest' || mood === 'dub_forest') {
+    TECHNO.dubSend = rngR(0.30, 0.40);
+    setDubSendGain(TECHNO.dubSend);
+    updateDubUI(TECHNO.dubSend);
+  }
 
   // ── Pattern-level shared modifiers (coherence) ──────
   const patternLfoBase  = rngR(prof.lfoRateRange[0], prof.lfoRateRange[1]);
@@ -12542,10 +12711,10 @@ const AUTO_PROB_PER_BAR = 0.22; // base trigger chance, scaled down by mix activ
 // Auto-mode flavors. Each shapes register (how low the drone sits), brightSink
 // (extra dip when granular is busy), hold length, dyad density/interval, voice
 // level, and rest between bursts.
-//   A = halo — airy mid-register single tones (default)
+//   A = halo — warm low-mid single tones that sit inside the track (default)
 //   B = deep — low sustained drones (the original auto behavior)
 const AUTO_MODES = {
-  A: { regBase: 0.55, regRand: 0.23, brightSink: 1.0, holdBase: 2.5, holdRand: 2.5, dyadChance: 0.12, dyadInterval: 12, voiceGain: 1.0, cooldownBase: 4, cooldownRand: 5 }, // halo (default)
+  A: { regBase: 0.36, regRand: 0.20, brightSink: 1.0, holdBase: 2.5, holdRand: 2.5, dyadChance: 0.12, dyadInterval: 12, voiceGain: 1.0, cooldownBase: 4, cooldownRand: 5 }, // halo — warm low-mid (default)
   B: { regBase: 0.16, regRand: 0.18, brightSink: 0.7, holdBase: 4,   holdRand: 6,   dyadChance: 0.28, dyadInterval: 7,  voiceGain: 1.0, cooldownBase: 3, cooldownRand: 4 }, // deep
 };
 let bmAutoMode = 'A';
@@ -13224,35 +13393,47 @@ window.asgOnGridGenerate = (info = {}) => {
   const staccato  = /short|wood|chime|glass|bell/.test(style);
   const sustained = style === 'long' || style === 'bowl';
 
+  // Per-generate jitter — the values below are brightness-matched (coherent), but
+  // were fully deterministic, so bloom sounded identical each jam. A small bounded
+  // ± keeps the integration while letting it breathe differently each time.
+  const R = Math.random;
+  const jit = amt => (R() * 2 - 1) * amt;
+
   // Octave — drop the drone under grid; deeper when grid sits high/bright.
   bmSetSlider('octSlider', (transpose >= 5 || bright > 0.6) ? -2 : -1);
   // Cutoff — fill the band grid leaves open: darker when grid is bright.
-  bmSetSlider('cutSlider', (0.10 + 0.20 * (1 - bright)) * 100);
+  bmSetSlider('cutSlider', (0.10 + 0.20 * (1 - bright)) * 100 + jit(4));
   // Detune — a touch more chorus width when grid is warm.
-  bmSetSlider('detSlider', 6 + (1 - bright) * 8);
+  bmSetSlider('detSlider', 6 + (1 - bright) * 8 + jit(2.5));
   // Attack — slow pad; slowest against a staccato grid for contrast.
-  bmSetSlider('atkSlider', staccato ? 2200 : sustained ? 1200 : 1600);
+  bmSetSlider('atkSlider', (staccato ? 2200 : sustained ? 1200 : 1600) + jit(250));
   // Release — long tails, stretched to match grid's reverb space.
-  bmSetSlider('relSlider', 5000 + reverb * 5000);
+  bmSetSlider('relSlider', 5000 + reverb * 5000 + jit(900));
   // Reverb — share grid's space, generously floored for the wash.
-  bmSetSlider('revbSlider', reverb * 100 + 15);
-  // Volume — supportive bed level: present, but under the grid.
-  bmSetSlider('volSlider', 22 + reverb * 8);
+  bmSetSlider('revbSlider', reverb * 100 + 15 + jit(4));
+  // Volume — supportive bed level: present, but under the grid (stays minimal).
+  bmSetSlider('volSlider', 22 + reverb * 8 + jit(2));
   // Shimmer — more upper-harmonic halo when grid is dark, less when it's bright.
-  bmSetSlider('shmrSlider', 15 + (1 - bright) * 35);
-  // Voice — pair bloom's timbre to the grid's lead character. Bowl drones get a
-  // singing bowl; glassy/chime/bell grids get glass; air/string get a warm reed;
-  // dark un-plucked beds get saw; very bright grids get sine; else warm triangle.
-  // Voice preset is intentionally skipped (bmSetWave) — the cut/det/shmr above are
-  // already brightness-matched to the grid context.
-  bmSetWave(
+  bmSetSlider('shmrSlider', 15 + (1 - bright) * 35 + jit(6));
+  // Tail-hold — vary 0.3–0.8s so released pads don't all decay identically.
+  bmAdsr.h = 0.3 + R() * 0.5;
+  // Voice — usually the brightness-matched pick; ~1 in 4 generates draws a
+  // complementary alternate from a small style-safe pool for timbral variety.
+  const baseVoice =
     style === 'bowl'              ? 'bowl' :
     /chime|glass|bell/.test(style) ? 'glass' :
     (style === 'air' || /string/.test(style)) ? 'reed' :
     (!staccato && bright < 0.35) ? 'sawtooth' :
     bright > 0.6                 ? 'sine' :
-    'triangle'
-  );
+    'triangle';
+  const voicePool = bright > 0.5 ? ['sine', 'triangle', 'glass'] : ['triangle', 'sawtooth', 'reed', 'bowl'];
+  bmSetWave(R() < 0.25 ? voicePool[(R() * voicePool.length) | 0] : baseVoice);
+  // Auto-burst flavor — occasionally (30%) re-bias halo/deep toward the grid's
+  // darkness, so a long jam wanders register without overriding a manual pick often.
+  if (R() < 0.3) {
+    const wantDeep = sustained || bright < 0.3;
+    setAutoMode((wantDeep ? R() < 0.8 : R() < 0.2) ? 'B' : 'A');
+  }
 
   // ── Modifier layers ──────────────────────────────────────
   // Very slow, shallow movement so the bed drifts rather than sitting static —
