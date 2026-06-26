@@ -234,6 +234,7 @@
         column-gap: 24px;
       }
       .bm-ctrl-col { display: flex; flex-direction: column; gap: 4px; }
+      #bm-genAcc { grid-column: 1 / -1; grid-row: 5; }
     }
 
     /* ── §CSS:shared  Shared component styles ── */
@@ -1026,9 +1027,9 @@
         <select id="gs2-srcSelect">
           <option value="tab">system audio</option>
           <option value="mic">mic</option>
-          <option value="grid" selected>grid audio</option>
+          <option value="grid">grid audio</option>
           <option value="bloom">bloom audio</option>
-          <option value="atmo">atmosphere</option>
+          <option value="atmo" selected>atmosphere</option>
         </select>
       </div>
       <button class="btn-action" id="gs2-recBtn">capture audio</button>
@@ -1254,6 +1255,8 @@
     <button class="view-toggle-btn active" id="gs-showVisual">visual</button>
     <span class="view-toggle-sep">/</span>
     <button class="view-toggle-btn" id="gs-showGlossary">glossary</button>
+    <span class="view-toggle-sep">/</span>
+    <button class="view-toggle-btn" id="gs-showGenDetails">generation details</button>
   </div>
 
   <div style="min-height:500px;width:100%;">
@@ -1314,6 +1317,10 @@
   <div id="gs-visualView" style="position:relative;width:100%;">
     <canvas id="gs-bh-cv"    style="width:100%;height:500px;display:block;border-radius:4px;"></canvas>
     <canvas id="gs-bh-grain" style="width:100%;height:500px;display:block;border-radius:4px;position:absolute;top:0;left:0;opacity:0.04;pointer-events:none;image-rendering:pixelated;"></canvas>
+  </div>
+
+  <div id="gs-genDetailsView" style="display:none;width:100%;">
+    <p id="gs-genText" style="margin:0; font-family:'Roboto Mono',monospace; font-size:11px; letter-spacing:1.2px; line-height:1.9; color:rgba(255,255,255,0.42);"></p>
   </div>
 
   </div><!-- min-height wrapper -->
@@ -1752,6 +1759,14 @@
           </div>
         </div>
       </div>
+      <!-- collapsible generation details (mirrors the drum/grid tabs) — current
+           patch settings + what the last auto-mode burst rolled -->
+      <div class="gs-acc" id="bm-genAcc" style="margin-top:8px;">
+        <button class="gs-acc-head" id="bm-genAccHead" tabindex="-1"><span class="gs-acc-label"><span class="gs-acc-chev">▾</span> generation details</span></button>
+        <div class="gs-acc-body">
+          <p id="bm-genText" style="margin:0; font-family:'Roboto Mono',monospace; font-size:11px; letter-spacing:1.2px; line-height:1.9; color:rgba(255,255,255,0.42);"></p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1840,6 +1855,13 @@
       <div class="gs-acc-body">
         <!-- sliders + LFO accordions built by buildAtmoPanel() -->
         <div id="dr-atmo-rows"></div>
+      </div>
+    </div>
+    <!-- collapsible generation details (mirrors the grid tab's poem footnote) -->
+    <div class="gs-acc" id="dr-genAcc">
+      <button class="gs-acc-head" id="dr-genAccHead" tabindex="-1"><span class="gs-acc-label"><span class="gs-acc-chev">▾</span> generation details</span></button>
+      <div class="gs-acc-body">
+        <p id="dr-genText" style="margin:0; font-family:'Roboto Mono',monospace; font-size:11px; letter-spacing:1.2px; line-height:1.9; color:rgba(255,255,255,0.42);"></p>
       </div>
     </div>
   </div>
@@ -4112,8 +4134,8 @@ window._gsHideHelp = hideHelp;
 
 // ─── Bottom section toggle ──────────────────────────────────────────────────────
 function showTab(active) {
-  const tabs = ['showVisual', 'showGlossary'];
-  const views = { showVisual: 'visualView', showGlossary: 'glossaryView' };
+  const tabs = ['showVisual', 'showGlossary', 'showGenDetails'];
+  const views = { showVisual: 'visualView', showGlossary: 'glossaryView', showGenDetails: 'genDetailsView' };
   tabs.forEach(id => {
     $$(id).classList.toggle('active', id === active);
     $$(views[id]).style.display = id === active ? '' : 'none';
@@ -4124,6 +4146,7 @@ function showTab(active) {
 
 $$('showVisual').addEventListener('click',   () => showTab('showVisual'));
 $$('showGlossary').addEventListener('click', () => showTab('showGlossary'));
+$$('showGenDetails').addEventListener('click', () => showTab('showGenDetails'));
 
 // Accordion headers — each header toggles its own .gs-acc box. Covers the
 // synthesis a/b engines plus their nested control a/b boxes (both gs- and gs2-
@@ -4245,18 +4268,55 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   const staccato  = /short|wood|chime|glass|bell/.test(style);
   const sustained = style === 'long' || style === 'bowl';
 
-  // Octave-shift the re-grained grid audio: grid sitting high/bright → granular
-  // drops an octave for body; grid dark/low → granular lifts an octave for air.
+  // Register bias: bright/high grid → granular drops for body; dark/low → lifts for air.
   const goLow = bright > 0.45 || transpose >= 3;
-  _gsSetSlider('pitchSlider', goLow ? 75 : 150);   // 0.75× or 1.5×
 
-  // Texture vs grid articulation — slow continuous wash to fill a staccato
-  // grid's gaps; shorter, busier grains for motion against a sustained grid.
-  _gsSetSlider('densSlider', staccato ? 22 : sustained ? 55 : 38);
-  _gsSetSlider('sizeSlider', staccato ? 420 : sustained ? 220 : 320);
+  // ── Complementary plan (shared by A + B) ─────────────────────────────────
+  // Computed once here, applied to A, then handed to B via info.granPlan so the
+  // two engines form ONE coordinated texture instead of two independent guesses.
+  //   Musical:  grain pitch ratios are just-intonation intervals (small-integer
+  //     frequency ratios = consonance); since we re-grain the grid's OWN in-key
+  //     audio, any such ratio lands on consonant partials of the current key, so
+  //     the dyad is automatically in tune with whatever the grid just generated.
+  //   Mathematical:  A and B are anti-correlated — grain rates use coprime tempo
+  //     subdivisions and grain sizes sit a golden ratio apart, so the two clouds
+  //     never phase-lock into static comb-filtering; they stay mutually transparent.
+  const plan = info.granPlan || (() => {
+    const pick = a => a[(Math.random() * a.length) | 0];
+    const PHI  = 1.618;
+    const dna  = window.asgDrumRhythm || null;
+    const bpm  = info.bpm || window.asgGetGridState?.().bpm || 120;
+    const barDur = (60 / bpm) * 4;                            // one 16-step bar, seconds
 
-  // Width + organic drift — more when the grid is sparse / staccato.
-  _gsSetSlider('spreadSlider',     staccato ? 85 : 60);
+    // Pitch — a consonant dyad bracketing the source: a low member chosen by
+    // register, and a partner a just interval (octave / fifth / fourth) away.
+    const interval = pick([2.0, 1.5, 4 / 3]);
+    const lowBase  = goLow ? pick([0.5, 2 / 3, 0.75]) : pick([0.75, 1.0]);
+    const hiMember = cl(lowBase * interval, 0.25, 4.0);
+
+    // Density — lock the grain rate to a tempo subdivision off the drum DNA's
+    // euclidean pulse counts. A and B draw DIFFERENT (coprime) pulse counts so
+    // their clouds pulse in a polyrhythm against the kit and against each other.
+    const grainsPerPulse = staccato ? 4 : sustained ? 8 : 6;  // wash denser than chop
+    const densFromPulses = k => cl((k * grainsPerPulse) / barDur, 8, 95);
+    const pulseA = dna?.rideK || 7;
+    const pulseB = dna?.rimK  || 9;
+
+    // Size — A by articulation (long grains fill a staccato grid's gaps; short
+    // grains add motion under a sustained one); B a golden ratio smaller.
+    const sizeA = staccato ? 420 : sustained ? 200 : 320;
+    const sizeB = cl(Math.round(sizeA / PHI), 10, 500);
+
+    return {
+      A: { pitch: Math.round((goLow ? lowBase  : hiMember) * 100), dens: densFromPulses(pulseA), size: sizeA, spread: staccato ? 88 : 62 },
+      B: { pitch: Math.round((goLow ? hiMember : lowBase ) * 100), dens: densFromPulses(pulseB), size: sizeB, spread: staccato ? 70 : 46 },
+    };
+  })();
+
+  _gsSetSlider('pitchSlider',  plan.A.pitch);
+  _gsSetSlider('densSlider',   plan.A.dens);
+  _gsSetSlider('sizeSlider',   plan.A.size);
+  _gsSetSlider('spreadSlider', plan.A.spread);
   _gsSetSlider('pitchDriftSlider', staccato ? 18 : 10);
 
   // Reverb — share grid's space, generously floored for the wash.
@@ -4289,7 +4349,23 @@ window.asgOnGridGenerateGranular = (info = {}) => {
     _gsSetSlider('dlyMixSlider', 0);
   }
 
-  window._gs2OnGridGenerate?.(info); // synthesis B re-voices too
+  info.granPlan = plan;               // hand the coordinated plan to B
+  window._gs2OnGridGenerate?.(info);  // synthesis B re-voices too
+
+  // ── Generation details — reflect what both layers just auto-rolled, read back
+  // from the (already-updated) value spans so this can't drift from the logic above.
+  const charLabel = staccato ? 'staccato' : sustained ? 'sustained' : 'mixed';
+  const getA = id => $$(id)?.textContent ?? '';
+  const getB = id => document.getElementById('gs2-' + id)?.textContent ?? '';
+  const layerFrag = (tag, get) => {
+    const dly = parseFloat(get('dlyMixVal')) > 0 ? `, delay ${get('dlyMixVal')}` : '';
+    return `${tag} pitch ${get('pitchVal')}, dens ${get('densVal')}, size ${get('sizeVal')}, reverb ${get('reverbVal')}${dly}`;
+  };
+  const genEl = $$('genText');
+  if (genEl) genEl.textContent =
+    `grid generate → re-grained as a consonant dyad matched to a ${charLabel} grid `
+    + `(${Math.round(bright * 100)}% bright, reverb ${Math.round(reverb * 100)}%). `
+    + `${layerFrag('A (grid → motion):', getA)}. ${layerFrag('B (atmosphere → wash):', getB)}.`;
 };
 
 // Session save/restore — snapshot every granular slider by id, and re-apply by
@@ -5344,12 +5420,23 @@ window._gs2OnGridGenerate = (info = {}) => {
   const style     = info.adsrStyle || '';
   const staccato  = /short|wood|chime|glass|bell/.test(style);
   const sustained = style === 'long' || style === 'bowl';
-  // B takes the opposite octave to A so the two layers stack as body + air.
   const goLow = bright > 0.45 || transpose >= 3;
-  _gsSetSlider('pitchSlider', goLow ? 150 : 75);
-  _gsSetSlider('densSlider', staccato ? 30 : sustained ? 62 : 45);
-  _gsSetSlider('sizeSlider', staccato ? 360 : sustained ? 180 : 260);
-  _gsSetSlider('spreadSlider',     staccato ? 75 : 55);
+
+  // Pitch / density / size / spread come from A's coordinated plan (see GS01's
+  // asgOnGridGenerateGranular) so the two engines form one consonant, mutually
+  // anti-correlated texture. B takes the plan's `B` half: the opposite member of
+  // the just-intonation dyad, a coprime tempo-locked grain rate, and a grain size
+  // a golden ratio apart from A's. Falls back to standalone values if called raw.
+  const planB = info.granPlan?.B || {
+    pitch: goLow ? 150 : 75,
+    dens:  staccato ? 30 : sustained ? 62 : 45,
+    size:  staccato ? 360 : sustained ? 180 : 260,
+    spread: staccato ? 75 : 55,
+  };
+  _gsSetSlider('pitchSlider',  planB.pitch);
+  _gsSetSlider('densSlider',   planB.dens);
+  _gsSetSlider('sizeSlider',   planB.size);
+  _gsSetSlider('spreadSlider', planB.spread);
   _gsSetSlider('pitchDriftSlider', staccato ? 22 : 14);
   _gsSetSlider('reverbSlider', cl(reverb * 100 + 6, 40, 88));
 
@@ -7990,7 +8077,7 @@ const DR_LANES = [
   { key: 'clap',   label: 'clap',   vel: 1.0,  gain: 0.42, play: (w, v, p) => drumClap(w, v, p) },
   { key: 'rim',    label: 'rim',    vel: 0.8,  gain: 0.5,  play: (w, v, p) => drumRim(w, v, p) },
   { key: 'chat',   label: 'hat c',  vel: 0.8,  gain: 0.16, play: (w, v, p) => drumHat(w, v, false, p) },
-  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.22, play: (w, v, p) => drumHat(w, v, true, p) },
+  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.24, play: (w, v, p) => drumHat(w, v, true, p) },
   { key: 'tomL',   label: 'tom',    vel: 0.9,  gain: 0.38, play: (w, v, p) => drumTom(w, v, p, 120) },
   { key: 'shkr',   label: 'shkr',   vel: 0.7,  gain: 0.3,  play: (w, v, p) => drumShaker(w, v, p) },
 ];
@@ -8519,6 +8606,9 @@ renderDrAll();
 document.getElementById('dr-ctrlAccHead')?.addEventListener('click', () => {
   document.getElementById('dr-ctrlAcc')?.classList.toggle('open');
 });
+document.getElementById('dr-genAccHead')?.addEventListener('click', () => {
+  document.getElementById('dr-genAcc')?.classList.toggle('open');
+});
 
 /* ── Drum help overlay (mirrors the grid / granular / bloom help) ──────────── */
 const DR_HELP = [
@@ -8678,6 +8768,42 @@ function makeDrArc(flavor) {
   });
 }
 
+// ── Generation details footnote (mirrors the grid tab's generatePoem/showPoem) ──
+// Summarises what regen()/composeDrSong() just rolled — mood, style, rhythmic
+// DNA — into the collapsible `generation details` accordion below atmosphere.
+function showDrPoem(text) {
+  const el = document.getElementById('dr-genText');
+  if (el) el.textContent = text;
+}
+function generateDrPoem(p) {
+  const { mode, atmosphere, style, bpm, swing, density, flavor, dna } = p;
+  const styleLabel = style === 'techno_dub' ? 'dub' : 'deep';
+
+  const rollFrag = (() => {
+    const rolling = TECHNO_LANE_KEYS
+      .filter(k => (TECHNO.laneLen[k] || 16) < 16)
+      .map(k => `${k} @ ${TECHNO.laneLen[k]}`);
+    return rolling.length
+      ? `rolling: ${rolling.join(', ')} against the 16-step kick`
+      : 'steady 16-step grid, no rolling lanes';
+  })();
+
+  const a = atmoCfg();
+  const fxFrag = [
+    `dub send ${Math.round(TECHNO.dubSend * 100)}%`,
+    `reverb ${Math.round(a.reverb * 100)}%`,
+    a.drive > 0.01 ? `drive ${Math.round(a.drive * 100)}%` : null,
+  ].filter(Boolean).join(', ');
+
+  const densityFrag = density != null ? ` density ${Math.round(density * 100)}%.` : '';
+
+  const songFrag = mode === 'song'
+    ? ` 8-page arc: intro → build ×2 → peak ×2 → develop ×2 → outro. flavor: ${flavor}. backbeat: ${dna.backbeat}, hat bias ${Math.round(dna.hatBias * 100)}%. rim/ride/poly pulses: ${dna.rimK}/${dna.rideK}/${dna.polyK}.${dna.ridePresent ? ' ride present.' : ''}${dna.kickPickup ? ' kick pickup.' : ''}${dna.industrial ? ' industrial accents.' : ''}`
+    : '';
+
+  return `mood: ${atmosphere} / style: ${styleLabel} / ${bpm} bpm, swing ${Math.round((swing || 0) * 100)}%. ${rollFrag}.${densityFrag} fx: ${fxFrag}.${songFrag}`;
+}
+
 // Compose all 8 pages as one coherent track: roll a shared rhythmic DNA + a
 // per-song "flavour" once, then build each page from a freshly-rolled arc. Songs
 // now differ from each other (flavour, hat density, ride presence, industrial
@@ -8724,6 +8850,10 @@ function composeDrSong() {
   drPageBtns.forEach((btn, idx) => btn.classList.toggle('active', idx === 0));
   clearDrSel();
   renderDrAll();
+  showDrPoem(generateDrPoem({
+    mode: 'song', atmosphere: TECHNO.atmosphere, style: TECHNO.style, bpm: S.bpm, swing: S.swing,
+    flavor, dna,
+  }));
 }
 // Back-compat alias for existing callers (shift/long-press generate, jam init).
 function generateAllDrPages() { composeDrSong(); }
@@ -8901,6 +9031,10 @@ document.getElementById('dr-regenBtn').addEventListener('click', (e) => {
   if (ctx) applyDrPageContext(ctx);
   clearDrSel();
   renderDrAll();
+  showDrPoem(generateDrPoem({
+    mode: 'single', atmosphere: TECHNO.atmosphere, style: TECHNO.style, bpm: S.bpm, swing: S.swing,
+    density: ctx ? ctx.density : 1,
+  }));
 });
 document.getElementById('dr-onToggle').addEventListener('click', () => {
   TECHNO.on = !TECHNO.on;
@@ -12436,6 +12570,30 @@ function bmPickIdxForPc(pc, regFrac) {
 }
 function bmIdxToY(idx, len) { return touchH * (1 - idx / Math.max(1, len - 1)); }
 
+// ── Generation details (mirrors the drum/grid tabs) — bloom has no discrete
+// `generate` button, so this reflects the live patch (re-read fresh each call,
+// so it can't drift from the sliders) plus what the last auto-mode burst rolled.
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+let _bmLastBurstFrag = '';
+function bmPatchSummary() {
+  const cut  = $$('cutVal')?.textContent ?? '';
+  const det  = $$('detVal')?.textContent ?? '';
+  const oct  = $$('octVal')?.textContent ?? '';
+  const atk  = $$('atkVal')?.textContent ?? '';
+  const rel  = $$('relVal')?.textContent ?? '';
+  const revb = $$('revbVal')?.textContent ?? '';
+  const vol  = $$('volVal')?.textContent ?? '';
+  const shmr = $$('shmrVal')?.textContent ?? '';
+  const scaleFrag = scaleLinked ? 'linked to grid' : ($$('scaleSelect')?.value || '').replace(/_/g, ' ');
+  return `voice: ${bmWave}, cut ${cut}, det ${det}, oct ${oct}, atk ${atk}, rel ${rel}, revb ${revb}, vol ${vol}, shmr ${shmr}. `
+       + `scale: ${scaleFrag}. bpm sync: ${_bmBpmSync ? 'on' : 'off'}. auto: ${bmAutoActive ? `on (${bmAutoMode === 'B' ? 'deep' : 'halo'})` : 'off'}.`;
+}
+function renderBmGenDetails() {
+  const el = $$('genText');
+  if (!el) return;
+  el.textContent = bmPatchSummary() + (_bmLastBurstFrag ? ' ' + _bmLastBurstFrag + '.' : '');
+}
+
 function fireAutoBurst(bpm) {
   const beatMs = (60 / bpm) * 1000;
   const M = AUTO_MODES[bmAutoMode] || AUTO_MODES.A;
@@ -12461,12 +12619,14 @@ function fireAutoBurst(bpm) {
   const pcs = [rootPc];
   if (dyad) pcs.push((rootPc + M.dyadInterval) % 12);
 
+  let firstHoldMs = null;
   pcs.forEach((pc, i) => {
     let y;
     if (pc != null) { const p = bmPickIdxForPc(pc, regFrac); y = bmIdxToY(p.idx, p.len); }
     else            { y = touchH * (1 - regFrac); }      // no harmony yet → low scale tone
     const x     = touchW * (0.5 + (Math.random() - 0.5) * (dyad ? 0.5 : 0.3));
     const hold  = beatMs * (M.holdBase + Math.random() * M.holdRand);
+    if (i === 0) firstHoldMs = hold;
     const delay = i * beatMs * (0.5 + Math.random());    // dyad tones nearly together
     const pid   = 'auto_' + (_autoPidCounter++);
     setTimeout(() => {
@@ -12478,6 +12638,14 @@ function fireAutoBurst(bpm) {
       setTimeout(() => bmHandleUp(pid), hold);
     }, delay);
   });
+
+  // ── Generation details — record what this burst rolled ──────────────────
+  const modeLabel = bmAutoMode === 'B' ? 'deep' : 'halo';
+  const register  = regFrac < 0.33 ? 'low' : regFrac < 0.66 ? 'mid' : 'high';
+  const noteName  = rootPc != null ? NOTE_NAMES[((rootPc % 12) + 12) % 12] : '—';
+  _bmLastBurstFrag = `last auto burst: ${modeLabel} mode, root ${noteName}, ${register} register`
+                   + `${dyad ? ' + dyad' : ''}, hold ${(firstHoldMs / 1000).toFixed(1)}s`;
+  renderBmGenDetails();
 }
 
 function tickAuto() {
@@ -13278,9 +13446,20 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// generation details accordion — collapsible, mirroring the drum/grid tabs.
+// Live patch settings are re-read on every input/click inside the panel so
+// the summary can't drift out of sync with whatever the performer is tweaking.
+$$('genAccHead')?.addEventListener('click', () => $$('genAcc')?.classList.toggle('open'));
+$$('panel').addEventListener('input', renderBmGenDetails);
+$$('panel').addEventListener('change', renderBmGenDetails);
+$$('panel').addEventListener('click', e => {
+  if (e.target.closest('.btn-action, .tui-btn')) renderBmGenDetails();
+});
+
 /* ── Boot ────────────────────────────────────────────── */
 setColorBox(lineColor);
 resize();
+renderBmGenDetails();
 // frame() starts when the bloom tab is first shown via _bmFrameStart
 
 })();
