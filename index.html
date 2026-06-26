@@ -3062,7 +3062,7 @@ async function ensureGranularCtx() {
     // the grid + drum buses. Keep granular well under the drums so it reads as a
     // textural accent layer, never overpowering the groove.
     _granTrim = ctx.createGain();
-    _granTrim.gain.value = 0.28;
+    _granTrim.gain.value = 0.31;
     _sharedLimiter.connect(_granTrim);
     _granTrim.connect(ctx.destination);
     _sharedGranCtx = ctx;
@@ -6005,7 +6005,7 @@ function ensureCtx() {
     igGlue = audioCtx.createDynamicsCompressor();
     igGlue.threshold.value = -20; igGlue.knee.value = 20; igGlue.ratio.value = 2.5;
     igGlue.attack.value = 0.015; igGlue.release.value = 0.25;
-    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.5;
+    igGlueMakeup = audioCtx.createGain(); igGlueMakeup.gain.value = 1.65;
     analyser.connect(igSoftShelf);
     igSoftShelf.connect(igGlue); igGlue.connect(igGlueMakeup); igGlueMakeup.connect(igLimiter);
     igLimiter.connect(audioCtx.destination);
