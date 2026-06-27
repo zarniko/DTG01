@@ -4103,7 +4103,7 @@ window._gsHideHelp = hideHelp;
       bhCtx.fillRect(pt.px - sz * 0.5, pt.py - sz * 0.5, sz, sz);
     }
 
-    bhCtx.fillStyle = '#000056';   // darker UI blue for the void centre (was black)
+    bhCtx.fillStyle = '#0000aa';   // same blue as the page background (was a darker navy, read as near-black)
     bhCtx.beginPath();
     bhCtx.arc(cx, cy, shadowPx, 0, Math.PI * 2);
     bhCtx.fill();
@@ -5824,7 +5824,16 @@ function applyAtmosphere(ramp) {
   // white noise reads hot, so scale the static slider well down — keeps it a
   // background texture even toward the top of its range
   atmo.noiseMix.gain.setTargetAtTime(a.noise.level * ATMO_STATIC_GAIN, t, S2);
-  atmo.drive.curve = _drumDriveCurve(Math.max(0.001, a.drive));
+  // Drive itself (a.drive) is a fixed per-atmosphere amount and never varies
+  // within a song — but rollAtmosphere() DOES randomize how much signal (drone +
+  // sub level) feeds into that same fixed waveshaper. A roll that lands toward
+  // the hot end of those ranges pushes more into the saturator and comes out
+  // audibly harsher, even though "drive" itself reads unchanged. Compensate by
+  // easing the effective amount down as the bed gets hotter, so the harshest
+  // rolls get pulled back toward the calmer ones instead of spiking.
+  const bedHot   = Math.max(0, Math.min(1, ((a.drone.level - 0.40) / 0.30 + (a.sub.level - 0.30) / 0.30) / 2));
+  const effDrive = a.drive * (1 - bedHot * 0.35);
+  atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effDrive));
   atmo.revGain.gain.setTargetAtTime(a.reverb, t, S2);
 }
 // Gate the bed: only sounds while the transport runs and the drums are on.
@@ -7521,18 +7530,24 @@ function drumTom(when, vel, p = {}, freq = 180, opts = {}) {
 const _HAT_RATIOS = [2, 3, 4.16, 5.43, 6.79, 8.21];
 function drumHat(when, vel, open, p = {}) {
   const dec = p.dec || 1, m = _ptchMul(p), snap = p.snap || 0;
-  const dur = (open ? 0.32 : 0.045) * dec;
+  // Closed gets a touch more decay (45ms→65ms) — barely audible as "ring", but
+  // enough time to actually register, vs. nearly nothing before.
+  const dur = (open ? 0.32 : 0.065) * dec;
   const chain = buildHitChain(p, when, dur);
   const out = chain.input;
 
   // band-pass picks the metallic band; high-pass clears the low mud below it.
+  // Shifting the closed hat's center frequency down (10.5k→8k) didn't actually
+  // help — white noise has a flat spectrum, so sliding a narrow window just
+  // samples a different equally-thin slice. Widening the window (lower Q) is
+  // what lets more total energy through; that's the real fix.
   const bp = audioCtx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.frequency.value = Math.max(2000, (open ? 8800 : 10500) * m);
-  bp.Q.value = 0.7 + snap * 1.4;
+  bp.frequency.value = Math.max(2000, (open ? 8800 : 8000) * m);
+  bp.Q.value = (open ? 0.7 : 0.45) + snap * 1.4;
   const hp = audioCtx.createBiquadFilter();
   hp.type = 'highpass';
-  hp.frequency.value = Math.max(1500, (open ? 6200 : 7800) * m);
+  hp.frequency.value = Math.max(1500, (open ? 6200 : 5500) * m);
   const g = audioCtx.createGain();
   g.gain.setValueAtTime(vel * (1 + snap * 0.5), when);
   g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
@@ -7549,10 +7564,13 @@ function drumHat(when, vel, open, p = {}) {
     o.start(when); o.stop(when + dur + 0.02);
     return o;
   });
-  // a whisper of high noise for air, so it isn't purely synthetic
+  // high noise for air. The closed hat leans on this (its metallic square partials
+  // barely survive the high band-pass), so it gets a louder, slightly lower-passed
+  // noise bed — turning it from a thin tick into a present, airy "tss". The open
+  // hat keeps its original whisper.
   const nz = audioCtx.createBufferSource(); nz.buffer = drumNoise();
-  const nhp = audioCtx.createBiquadFilter(); nhp.type = 'highpass'; nhp.frequency.value = Math.max(3000, 9000 * m);
-  const ng = audioCtx.createGain(); ng.gain.value = 0.10;
+  const nhp = audioCtx.createBiquadFilter(); nhp.type = 'highpass'; nhp.frequency.value = Math.max(3000, (open ? 9000 : 7000) * m);
+  const ng = audioCtx.createGain(); ng.gain.value = open ? 0.10 : 0.20;
   nz.connect(nhp); nhp.connect(ng); ng.connect(bp);
   nz.start(when); nz.stop(when + dur + 0.02);
 
@@ -8150,13 +8168,13 @@ updateDrumsToggle();
 // (snr/tom keys retain their original snr2/tomL identities; just relabelled.)
 const DR_LANES = [
   { key: 'kick1',  label: 'kick',   vel: 0.95, gain: 0.95, play: (w, v, p) => drumKick(w, v, p) },
-  { key: 'snr2',   label: 'snr',    vel: 0.85, gain: 0.36, play: (w, v, p) => drumSnare(w, v, p, { electronic: true }) },
-  { key: 'clap',   label: 'clap',   vel: 1.0,  gain: 0.47, play: (w, v, p) => drumClap(w, v, p) },
-  { key: 'rim',    label: 'rim',    vel: 0.8,  gain: 0.56, play: (w, v, p) => drumRim(w, v, p) },
-  { key: 'chat',   label: 'hat c',  vel: 0.8,  gain: 0.18, play: (w, v, p) => drumHat(w, v, false, p) },
-  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.27, play: (w, v, p) => drumHat(w, v, true, p) },
-  { key: 'tomL',   label: 'tom',    vel: 0.9,  gain: 0.38, play: (w, v, p) => drumTom(w, v, p, 120) },
-  { key: 'shkr',   label: 'shkr',   vel: 0.7,  gain: 0.34, play: (w, v, p) => drumShaker(w, v, p) },
+  { key: 'snr2',   label: 'snr',    vel: 0.85, gain: 0.41, play: (w, v, p) => drumSnare(w, v, p, { electronic: true }) },
+  { key: 'clap',   label: 'clap',   vel: 1.0,  gain: 0.53, play: (w, v, p) => drumClap(w, v, p) },
+  { key: 'rim',    label: 'rim',    vel: 0.8,  gain: 0.63, play: (w, v, p) => drumRim(w, v, p) },
+  { key: 'chat',   label: 'hat c',  vel: 0.8,  gain: 0.20, play: (w, v, p) => drumHat(w, v, false, p) },
+  { key: 'ohat',   label: 'hat o',  vel: 1.0,  gain: 0.31, play: (w, v, p) => drumHat(w, v, true, p) },
+  { key: 'tomL',   label: 'tom',    vel: 0.9,  gain: 0.43, play: (w, v, p) => drumTom(w, v, p, 120) },
+  { key: 'shkr',   label: 'shkr',   vel: 0.7,  gain: 0.38, play: (w, v, p) => drumShaker(w, v, p) },
 ];
 const drCellEls = DR_LANES.map(() => new Array(COLS));
 const drPips = [];
