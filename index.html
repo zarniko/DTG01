@@ -925,10 +925,28 @@
           <input type="range" id="gs-reverbSlider" min="0" max="100" value="70" step="1">
           <span class="ctrl-val" id="gs-reverbVal">0.70</span>
         </div>
-        <div class="ctrl-row slider" title="Volume — output gain of the granular engine">
-          <span class="ctrl-key">vol</span>
+        <div class="ctrl-row slider" title="Volume — output gain of the granular engine. Click to open an LFO that swells (sine/tri) or gates (sqr) the engine in and out">
+          <span class="ctrl-key lfo-toggle" id="gs-lfo-lbl-vol">vol<span class="lfo-chev">›</span></span>
           <input type="range" id="gs-volSlider" min="0" max="1000" value="75" step="5">
           <span class="ctrl-val" id="gs-volVal">0.60×</span>
+        </div>
+        <div class="lfo-panel" id="gs-lfo-panel-vol">
+          <div class="ctrl-row slider">
+            <span class="lfo-sub-key">rate</span>
+            <input type="range" id="gs-lfoVolRate" min="0" max="100" value="0" step="1">
+            <span class="ctrl-val" id="gs-lfoVolRateVal">off</span>
+          </div>
+          <div class="ctrl-row slider">
+            <span class="lfo-sub-key">dpt</span>
+            <input type="range" id="gs-lfoVolDepth" min="0" max="100" value="0" step="1">
+            <span class="ctrl-val" id="gs-lfoVolDepthVal">0%</span>
+          </div>
+          <div class="ctrl-row" style="gap:4px;align-items:center;">
+            <span class="lfo-sub-key">shp</span>
+            <button class="tui-btn gs-lfo-shape sel" data-shape="sine"     tabindex="-1">sin</button>
+            <button class="tui-btn gs-lfo-shape"     data-shape="triangle" tabindex="-1">tri</button>
+            <button class="tui-btn gs-lfo-shape"     data-shape="square"   tabindex="-1" title="Square — hard gate, fully in/out rather than a smooth swell">sqr</button>
+          </div>
         </div>
         <div class="ctrl-row slider" title="Preservation — buffer feedback. At 0, incoming audio overwrites the buffer; at 1, old audio never erases and layers accumulate indefinitely">
           <span class="ctrl-key">prsv</span>
@@ -1159,10 +1177,28 @@
           <input type="range" id="gs2-reverbSlider" min="0" max="100" value="70" step="1">
           <span class="ctrl-val" id="gs2-reverbVal">0.70</span>
         </div>
-        <div class="ctrl-row slider" title="Volume — output gain of the granular engine">
-          <span class="ctrl-key">vol</span>
+        <div class="ctrl-row slider" title="Volume — output gain of the granular engine. Click to open an LFO that swells (sine/tri) or gates (sqr) the engine in and out">
+          <span class="ctrl-key lfo-toggle" id="gs2-lfo-lbl-vol">vol<span class="lfo-chev">›</span></span>
           <input type="range" id="gs2-volSlider" min="0" max="1000" value="75" step="5">
           <span class="ctrl-val" id="gs2-volVal">0.60×</span>
+        </div>
+        <div class="lfo-panel" id="gs2-lfo-panel-vol">
+          <div class="ctrl-row slider">
+            <span class="lfo-sub-key">rate</span>
+            <input type="range" id="gs2-lfoVolRate" min="0" max="100" value="0" step="1">
+            <span class="ctrl-val" id="gs2-lfoVolRateVal">off</span>
+          </div>
+          <div class="ctrl-row slider">
+            <span class="lfo-sub-key">dpt</span>
+            <input type="range" id="gs2-lfoVolDepth" min="0" max="100" value="0" step="1">
+            <span class="ctrl-val" id="gs2-lfoVolDepthVal">0%</span>
+          </div>
+          <div class="ctrl-row" style="gap:4px;align-items:center;">
+            <span class="lfo-sub-key">shp</span>
+            <button class="tui-btn gs-lfo-shape sel" data-shape="sine"     tabindex="-1">sin</button>
+            <button class="tui-btn gs-lfo-shape"     data-shape="triangle" tabindex="-1">tri</button>
+            <button class="tui-btn gs-lfo-shape"     data-shape="square"   tabindex="-1" title="Square — hard gate, fully in/out rather than a smooth swell">sqr</button>
+          </div>
         </div>
         <div class="ctrl-row slider" title="Preservation — buffer feedback. At 0, incoming audio overwrites the buffer; at 1, old audio never erases and layers accumulate indefinitely">
           <span class="ctrl-key">prsv</span>
@@ -1855,14 +1891,16 @@
           <!-- 9 per-hit sliders + LFO accordions built by buildDrFxPanel() -->
           <div id="dr-fx-rows"></div>
         </div>
-      </div>
-    </div>
-    <!-- collapsible atmosphere bed mix (drone / sub / static / drive / space) -->
-    <div class="gs-acc open" id="dr-atmoAcc">
-      <button class="gs-acc-head" id="dr-atmoAccHead" tabindex="-1"><span class="gs-acc-label"><span class="gs-acc-chev">▾</span> atmosphere</span></button>
-      <div class="gs-acc-body">
-        <!-- sliders + LFO accordions built by buildAtmoPanel() -->
-        <div id="dr-atmo-rows"></div>
+        <!-- collapsible atmosphere bed mix (drone / sub / static / drive / space) —
+             nested inside controls, at the bottom (mirrors granular's nested
+             control/delay accordions) -->
+        <div class="gs-acc open" id="dr-atmoAcc" style="margin-top: 8px;">
+          <button class="gs-acc-head" id="dr-atmoAccHead" tabindex="-1"><span class="gs-acc-label"><span class="gs-acc-chev">▾</span> atmosphere</span></button>
+          <div class="gs-acc-body">
+            <!-- sliders + LFO accordions built by buildAtmoPanel() -->
+            <div id="dr-atmo-rows"></div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- collapsible generation details (mirrors the grid tab's poem footnote) -->
@@ -3053,6 +3091,31 @@ const S = {
 let audioCtx, granularNode, analyserOut, analyserIn, reverbWetGain, reverbDryGain, masterGain, sourceNode;
 let grainFilter = null, dryGain = null, wetGain = null;
 let gsDelay = null;
+// Volume LFO — swells (sine/tri) or hard-gates (sqr) the engine's output in and
+// out. Additive modulation on masterGain.gain (mirrors bloom's vol LFO pattern):
+// the oscillator's depthGain sums directly onto whatever the vol slider set.
+let gsVolLfo = null;
+let gsVolLfoRate = 0, gsVolLfoDepth = 0, gsVolLfoShape = 'sine';
+const GS_VOL_LFO_SWING = 0.5;
+function buildGsVolLfo(masterGainNode) {
+  const osc = audioCtx.createOscillator();
+  osc.type = gsVolLfoShape;
+  osc.frequency.value = gsVolLfoRate || 0.001;   // 0Hz oscillators are silent — keep a tiny crawl
+  const depthGain = audioCtx.createGain();
+  depthGain.gain.value = gsVolLfoDepth * GS_VOL_LFO_SWING;
+  osc.connect(depthGain);
+  depthGain.connect(masterGainNode.gain);
+  osc.start();
+  return { osc, depthGain };
+}
+// Shared by the manual shape-button click handler and auto-generation, so both
+// paths update the UI selection, the live state, and the running oscillator consistently.
+function gsSetVolLfoShape(shape) {
+  const panel = $$('lfo-panel-vol');
+  panel?.querySelectorAll('.gs-lfo-shape').forEach(b => b.classList.toggle('sel', b.dataset.shape === shape));
+  gsVolLfoShape = shape;
+  if (gsVolLfo) gsVolLfo.osc.type = shape;
+}
 let _waveAnalyserA = null;
 let _captureStream = null; // holds full getDisplayMedia stream so we can stop it later
 
@@ -3245,6 +3308,8 @@ async function initAudio(srcType) {
   masterGain.gain.value = S.isMuted ? 0 : S.volume;
   if (gsDelay) { try { clearTimeout(gsDelay.probTimer); gsDelay.lfos.forEach(o => o.stop()); gsDelay.input.disconnect(); gsDelay.tone.disconnect(); } catch (_) {} }
   gsDelay = buildGsDelay(grainFilter, masterGain);
+  if (gsVolLfo) { try { gsVolLfo.osc.stop(); gsVolLfo.osc.disconnect(); gsVolLfo.depthGain.disconnect(); } catch (_) {} }
+  gsVolLfo = buildGsVolLfo(masterGain);
   reverbDryGain.connect(wetGain);
   reverbWetGain.connect(wetGain);
   wetGain.connect(masterGain);
@@ -3474,6 +3539,27 @@ $$('volSlider').addEventListener('input', e => {
   S.volume = v;
   $$('volVal').textContent = v.toFixed(2) + '×';
   if (masterGain && !S.isMuted) masterGain.gain.value = v;
+});
+
+// Volume LFO — open/close panel, rate/depth/shape (additive onto masterGain.gain)
+$$('lfo-lbl-vol').addEventListener('click', () => {
+  $$('lfo-panel-vol').classList.toggle('open');
+  $$('lfo-lbl-vol').classList.toggle('open');
+});
+$$('lfoVolRate').addEventListener('input', function () {
+  const hz = this.value / 10;
+  gsVolLfoRate = hz;
+  $$('lfoVolRateVal').textContent = hz === 0 ? 'off' : hz.toFixed(1) + 'Hz';
+  if (gsVolLfo) gsVolLfo.osc.frequency.setTargetAtTime(hz || 0.001, audioCtx.currentTime, 0.05);
+});
+$$('lfoVolDepth').addEventListener('input', function () {
+  const d = this.value / 100;
+  gsVolLfoDepth = d;
+  $$('lfoVolDepthVal').textContent = this.value + '%';
+  if (gsVolLfo) gsVolLfo.depthGain.gain.setTargetAtTime(d * GS_VOL_LFO_SWING, audioCtx.currentTime, 0.05);
+});
+$$('lfo-panel-vol').querySelectorAll('.gs-lfo-shape').forEach(btn => {
+  btn.addEventListener('click', () => gsSetVolLfoShape(btn.dataset.shape));
 });
 
 $$('head1Rate').addEventListener('input', e => {
@@ -4399,12 +4485,35 @@ window.asgOnGridGenerateGranular = (info = {}) => {
   // motion without tipping into chaos.
   {
     const R = Math.random, rr = (lo, hi) => lo + R() * (hi - lo);
-    _gsSetSlider('posSlider',       Math.round(rr(38, 62)));                   // sample point wanders off-centre
-    _gsSetSlider('revProbSlider',   R() < 0.30 ? Math.round(rr(8, 22)) : 0);  // occasional reverse-grain shimmer
-    _gsSetSlider('headJumpSlider',  R() < 0.15 ? Math.round(rr(4, 12)) : 0);  // rare glitch scatter
-    _gsSetSlider('filterResSlider', R() < 0.40 ? Math.round(rr(10, 35)) : 10);// light resonant colour
+    _gsSetSlider('posSlider', Math.round(rr(38, 62)));   // sample point wanders off-centre
+
+    let rev = R() < 0.30 ? rr(8, 22) : 0;    // occasional reverse-grain shimmer
+    let jmp = R() < 0.15 ? rr(4, 12) : 0;    // rare glitch scatter
+    let res = R() < 0.40 ? rr(10, 35) : 10;  // light resonant colour
+    // Volume breathing — slow sine/triangle swell only (no square gate here; that
+    // stays a manual-only "spicy" option so auto-generation never surprises with
+    // a hard chop). Multi-second cycle, gentle depth — a breath, not a tremolo.
+    const volOn = R() < 0.18;
+    let volRate = volOn ? rr(0.05, 0.25) : 0;
+    let volDepth = volOn ? rr(15, 40) : 0;
+    // Stacking leveling — these roll independently, so a generation can
+    // occasionally land several "spicy" textures together (reverse grains +
+    // head-jump + high resonance + a volume swell), reading busier/harsher than
+    // a roll where at most one fires. Ease them all down a touch when more than
+    // one is active.
+    const spicy = (rev > 0 ? 1 : 0) + (jmp > 0 ? 1 : 0) + (res > 12 ? 1 : 0) + (volOn ? 1 : 0);
+    if (spicy > 1) {
+      const ease = 1 - (spicy - 1) * 0.25;
+      rev *= ease; jmp *= ease; res = 10 + (res - 10) * ease; volDepth *= ease;
+    }
+    _gsSetSlider('revProbSlider',   Math.round(rev));
+    _gsSetSlider('headJumpSlider',  Math.round(jmp));
+    _gsSetSlider('filterResSlider', Math.round(res));
     _gsSetSlider('head1Rate',       Math.round(rr(15, 45)));                   // forward scan speed
     _gsSetSlider('head2Rate',       Math.round(rr(-30, -10)));                 // reverse scan speed
+    _gsSetSlider('lfoVolRate',  Math.round(volRate * 10));
+    _gsSetSlider('lfoVolDepth', Math.round(volDepth));
+    if (volOn) gsSetVolLfoShape(R() < 0.6 ? 'sine' : 'triangle');
   }
 
   info.granPlan = plan;               // hand the coordinated plan to B
@@ -4715,6 +4824,28 @@ const S = {
 let audioCtx, granularNode, analyserOut, analyserIn, reverbWetGain, reverbDryGain, masterGain, sourceNode;
 let grainFilter = null, dryGain = null, wetGain = null;
 let gsDelay = null;
+// Volume LFO — swells (sine/tri) or hard-gates (sqr) the engine's output in and
+// out. Additive modulation on masterGain.gain (mirrors bloom's vol LFO pattern).
+let gsVolLfo = null;
+let gsVolLfoRate = 0, gsVolLfoDepth = 0, gsVolLfoShape = 'sine';
+const GS_VOL_LFO_SWING = 0.5;
+function buildGsVolLfo(masterGainNode) {
+  const osc = audioCtx.createOscillator();
+  osc.type = gsVolLfoShape;
+  osc.frequency.value = gsVolLfoRate || 0.001;
+  const depthGain = audioCtx.createGain();
+  depthGain.gain.value = gsVolLfoDepth * GS_VOL_LFO_SWING;
+  osc.connect(depthGain);
+  depthGain.connect(masterGainNode.gain);
+  osc.start();
+  return { osc, depthGain };
+}
+function gsSetVolLfoShape(shape) {
+  const panel = $$('lfo-panel-vol');
+  panel?.querySelectorAll('.gs-lfo-shape').forEach(b => b.classList.toggle('sel', b.dataset.shape === shape));
+  gsVolLfoShape = shape;
+  if (gsVolLfo) gsVolLfo.osc.type = shape;
+}
 let _waveAnalyserB = null;
 let _captureStream = null;
 
@@ -4836,6 +4967,8 @@ async function initAudio(srcType) {
   masterGain.gain.value = S.isMuted ? 0 : S.volume;
   if (gsDelay) { try { clearTimeout(gsDelay.probTimer); gsDelay.lfos.forEach(o => o.stop()); gsDelay.input.disconnect(); gsDelay.tone.disconnect(); } catch (_) {} }
   gsDelay = buildGsDelay(grainFilter, masterGain);
+  if (gsVolLfo) { try { gsVolLfo.osc.stop(); gsVolLfo.osc.disconnect(); gsVolLfo.depthGain.disconnect(); } catch (_) {} }
+  gsVolLfo = buildGsVolLfo(masterGain);
   reverbDryGain.connect(wetGain);
   reverbWetGain.connect(wetGain);
   wetGain.connect(masterGain);
@@ -5065,6 +5198,27 @@ $$('volSlider').addEventListener('input', e => {
   S.volume = v;
   $$('volVal').textContent = v.toFixed(2) + '×';
   if (masterGain && !S.isMuted) masterGain.gain.value = v;
+});
+
+// Volume LFO — open/close panel, rate/depth/shape (additive onto masterGain.gain)
+$$('lfo-lbl-vol').addEventListener('click', () => {
+  $$('lfo-panel-vol').classList.toggle('open');
+  $$('lfo-lbl-vol').classList.toggle('open');
+});
+$$('lfoVolRate').addEventListener('input', function () {
+  const hz = this.value / 10;
+  gsVolLfoRate = hz;
+  $$('lfoVolRateVal').textContent = hz === 0 ? 'off' : hz.toFixed(1) + 'Hz';
+  if (gsVolLfo) gsVolLfo.osc.frequency.setTargetAtTime(hz || 0.001, audioCtx.currentTime, 0.05);
+});
+$$('lfoVolDepth').addEventListener('input', function () {
+  const d = this.value / 100;
+  gsVolLfoDepth = d;
+  $$('lfoVolDepthVal').textContent = this.value + '%';
+  if (gsVolLfo) gsVolLfo.depthGain.gain.setTargetAtTime(d * GS_VOL_LFO_SWING, audioCtx.currentTime, 0.05);
+});
+$$('lfo-panel-vol').querySelectorAll('.gs-lfo-shape').forEach(btn => {
+  btn.addEventListener('click', () => gsSetVolLfoShape(btn.dataset.shape));
 });
 
 $$('head1Rate').addEventListener('input', e => {
@@ -5530,12 +5684,32 @@ window._gs2OnGridGenerate = (info = {}) => {
   // ── Texture variation (bounded, gentler than A — B is the background wash) ──
   {
     const R = Math.random, rr = (lo, hi) => lo + R() * (hi - lo);
-    _gsSetSlider('posSlider',       Math.round(rr(40, 60)));
-    _gsSetSlider('revProbSlider',   R() < 0.35 ? Math.round(rr(10, 28)) : 0);  // washes take reverse grains nicely
-    _gsSetSlider('headJumpSlider',  R() < 0.10 ? Math.round(rr(3, 8)) : 0);
-    _gsSetSlider('filterResSlider', R() < 0.35 ? Math.round(rr(8, 28)) : 10);
+    _gsSetSlider('posSlider', Math.round(rr(40, 60)));
+
+    let rev = R() < 0.35 ? rr(10, 28) : 0;  // washes take reverse grains nicely
+    let jmp = R() < 0.10 ? rr(3, 8) : 0;
+    let res = R() < 0.35 ? rr(8, 28) : 10;
+    // Volume breathing — slightly more likely and a touch slower than A's, since
+    // a background wash breathing in and out fits its role naturally. Sine/tri
+    // only — the hard square gate stays a manual-only option.
+    const volOn = R() < 0.22;
+    let volRate = volOn ? rr(0.04, 0.18) : 0;
+    let volDepth = volOn ? rr(12, 35) : 0;
+    // Stacking leveling — same idea as A: ease back when more than one "spicy"
+    // texture fires together, so B doesn't occasionally turn busy/harsh either.
+    const spicy = (rev > 0 ? 1 : 0) + (jmp > 0 ? 1 : 0) + (res > 12 ? 1 : 0) + (volOn ? 1 : 0);
+    if (spicy > 1) {
+      const ease = 1 - (spicy - 1) * 0.25;
+      rev *= ease; jmp *= ease; res = 10 + (res - 10) * ease; volDepth *= ease;
+    }
+    _gsSetSlider('revProbSlider',   Math.round(rev));
+    _gsSetSlider('headJumpSlider',  Math.round(jmp));
+    _gsSetSlider('filterResSlider', Math.round(res));
     _gsSetSlider('head1Rate',       Math.round(rr(10, 35)));
     _gsSetSlider('head2Rate',       Math.round(rr(-28, -8)));
+    _gsSetSlider('lfoVolRate',  Math.round(volRate * 10));
+    _gsSetSlider('lfoVolDepth', Math.round(volDepth));
+    if (volOn) gsSetVolLfoShape(R() < 0.6 ? 'sine' : 'triangle');
   }
 };
 
@@ -5826,12 +6000,17 @@ function applyAtmosphere(ramp) {
   atmo.noiseMix.gain.setTargetAtTime(a.noise.level * ATMO_STATIC_GAIN, t, S2);
   // Drive itself (a.drive) is a fixed per-atmosphere amount and never varies
   // within a song — but rollAtmosphere() DOES randomize how much signal (drone +
-  // sub level) feeds into that same fixed waveshaper. A roll that lands toward
-  // the hot end of those ranges pushes more into the saturator and comes out
-  // audibly harsher, even though "drive" itself reads unchanged. Compensate by
-  // easing the effective amount down as the bed gets hotter, so the harshest
-  // rolls get pulled back toward the calmer ones instead of spiking.
-  const bedHot   = Math.max(0, Math.min(1, ((a.drone.level - 0.40) / 0.30 + (a.sub.level - 0.30) / 0.30) / 2));
+  // sub + static level) feeds into that same fixed waveshaper. A roll that lands
+  // toward the hot end of those ranges pushes more into the saturator and comes
+  // out audibly harsher, even though "drive" itself reads unchanged. Compensate
+  // by easing the effective amount down as the bed gets hotter, so the harshest
+  // rolls get pulled back toward the calmer ones instead of spiking. (Static's
+  // own LFO swell scales with its base level too, so this also catches that.)
+  const bedHot   = Math.max(0, Math.min(1, (
+    (a.drone.level - 0.40) / 0.30 +
+    (a.sub.level   - 0.30) / 0.30 +
+    (a.noise.level - 0.002) / 0.008
+  ) / 3));
   const effDrive = a.drive * (1 - bedHot * 0.35);
   atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effDrive));
   atmo.revGain.gain.setTargetAtTime(a.reverb, t, S2);
@@ -7133,7 +7312,19 @@ function playTone(freq, note, when) {
   dist.curve = distCurve(dst, note.dstShape ?? FX.dstShape ?? 'soft');
   dist.oversample = '2x';
 
-  const pk = note.vol * 0.5;
+  // A resonant lowpass doesn't just shape tone — a biquad's Q boosts the signal
+  // AT the cutoff frequency by roughly 20·log10(Q) dB, so a high-resonance note
+  // can ring out far louder than `vol` suggests WHEN its cutoff is actively
+  // sweeping (the LFO carries the resonant peak across the note's harmonics,
+  // landing hot intermittently — that's the "loud and high-pitched" mechanism).
+  // A note with static, non-swept resonance doesn't have that moving-target
+  // problem — it's just the mood's intended bite — so only compensate notes
+  // that actually have an active cut-LFO; this was previously unconditional and
+  // ended up quietly halving the volume of most notes in resonant moods like
+  // deep_stab even when nothing was sweeping.
+  const hasCutSweep = !!(note.lfo && note.lfo.cut && note.lfo.cut.depth > 0);
+  const resComp = hasCutSweep ? 1 / Math.sqrt(Math.max(1, res)) : 1;
+  const pk = note.vol * 0.5 * resComp;
   gain.gain.setValueAtTime(0, when);
   if (adsr_) {
     const sus = Math.max(0.001, Math.min(0.999, adsr_.s));
@@ -7798,6 +7989,30 @@ function programHitFx(L, dub) {
     if (R() < 0.7) setLfo(k, c, 'filt', rng(0.03, 0.12), rng(0.25, 0.50), 'water');
     if (R() < 0.6) setLfo(k, c, 'pan',  rng(0.03, 0.10), rng(0.4, 0.8) * panScale, 'water');
   });
+
+  // Crush leveling — chat/snr2 crush each roll independently per hit, so a
+  // pattern can occasionally land several hot rolls together and read grittier
+  // overall even though no single hit was extreme. Ease the whole pattern's
+  // crush down toward the calmer baseline when its average is hot; a pattern
+  // that mostly rolled low crush is left untouched.
+  {
+    const crushVals = [];
+    for (let c = 0; c < COLS; c++) {
+      if (fx.crush.chat[c] > 0) crushVals.push(fx.crush.chat[c]);
+      if (fx.crush.snr2[c] > 0) crushVals.push(fx.crush.snr2[c]);
+    }
+    if (crushVals.length) {
+      const avgCrush = crushVals.reduce((s, v) => s + v, 0) / crushVals.length;
+      const hot = Math.max(0, Math.min(1, (avgCrush - 0.10) / 0.10));
+      if (hot > 0) {
+        const ease = 1 - hot * 0.4;
+        for (let c = 0; c < COLS; c++) {
+          fx.crush.chat[c] *= ease;
+          fx.crush.snr2[c] *= ease;
+        }
+      }
+    }
+  }
 
   return fx;
 }
@@ -8871,15 +9086,18 @@ document.addEventListener('keydown', e => {
 });
 
 document.getElementById('dr-playBtn').addEventListener('click', () => S.playing ? stopSeq() : startSeq());
-document.getElementById('dr-styleSelect').addEventListener('change', function () {
-  // Swap the sound character — dub send + atmosphere bed change live, and the fx
-  // coat re-shades to fit (so old dub grit doesn't linger under a deep mood) —
-  // but which steps are on stays put until the user clicks generate.
-  setAtmosphere(this.value);
+// Picking a different atmosphere here is just a pending choice — it does NOT
+// touch the live sound (bed, dub send, fx coat) by itself. applyPendingAtmosphere()
+// (below) applies it at the moment the user actually clicks generate, so browsing
+// the dropdown never changes what's currently playing.
+function applyPendingAtmosphere() {
+  const dsel = document.getElementById('dr-styleSelect');
+  if (!dsel || dsel.value === TECHNO.atmosphere || !ATMOSPHERES[dsel.value]) return;
+  setAtmosphere(dsel.value);
   TECHNO.reshadeFx();
   renderDrAll();
   populateGridMoods();         // grid mood options follow the atmosphere's drum style
-});
+}
 // ── Song composition ────────────────────────────────────────────────────────
 // Per-page prime-number rotation offsets — relate the pages rhythmically while
 // keeping each one distinct (same trick the grid song generator uses).
@@ -8950,6 +9168,7 @@ function generateDrPoem(p) {
 function composeDrSong() {
   const pick = a => a[(Math.random() * a.length) | 0];
   const rnd  = (lo, hi) => lo + Math.random() * (hi - lo);
+  applyPendingAtmosphere();   // apply a pending dropdown pick now, at generate time
   // Roll a fresh atmosphere bed too (drone/sub/static/reverb balance + slow
   // tempo-locked LFOs) so the background evolves per song. rollAtmosphere leaves
   // the overall bed master level alone, so this stays minimal — it varies the
@@ -9165,8 +9384,9 @@ function drStopProgression() {
   }, true);
 })();
 document.getElementById('dr-regenBtn').addEventListener('click', (e) => {
-  rollAtmosphere();   // generation also rolls a fresh atmosphere bed
-  if (e.shiftKey) { generateAllDrPages(); return; }
+  applyPendingAtmosphere();   // apply a pending dropdown pick now, at generate time
+  if (e.shiftKey) { generateAllDrPages(); return; }   // composeDrSong() rolls its own bed
+  rollAtmosphere();   // single-page generation also rolls a fresh atmosphere bed
   // Single page — if the other pages already hold a groove, regenerate to fit it
   // (matching density, kit palette and per-hit character, leaning on neighbours).
   const ctx = extractDrPageContext(TECHNO.page);
@@ -10112,13 +10332,25 @@ $$('randRefresh').addEventListener('click', (e) => {
     // does not, so it isn't used). Baselines are set so the warm/dark "perfect"
     // settings (~8% dist, dark cutoff, mid resonance) score ~0 and stay at unity.
     const distN  = cl((gDist - 0.08) / 0.12);          // ≤8% dist scores 0
-    const resN   = cl((gRes - 3.0) / 2.5);             // resonance above mid
+    // gRes alone is one lucky/unlucky random sample from the mood's resRange —
+    // each NOTE independently rolls its own resonance from that same range, so a
+    // generation can read "calm" by this one proxy while several notes still land
+    // near the mood's ceiling (e.g. deep_stab's 5.5). Blend toward the mood's own
+    // ceiling so structurally spicier moods get a consistently higher baseline,
+    // not just whichever generation got unlucky on a single sample.
+    const resCeil = prof.resRange ? prof.resRange[1] : gRes;
+    const resN   = cl(((gRes + resCeil) / 2 - 3.0) / 2.5);
     const cutN   = cl((gCutoff - 700) / 1500);         // per-note filter brightness
     const lpfN   = cl((gLPF - 10000) / 6000);          // global brightness
     const harsh  = cl(distN * 0.38 + resN * 0.30 + cutN * 0.20 + lpfN * 0.12);
     if (audioCtx) {
       const t2 = audioCtx.currentTime;
-      if (igGlueMakeup) igGlueMakeup.gain.setTargetAtTime(1.0 - harsh * 0.38, t2, 0.10);  // warm 1.0 → harsh ~0.62
+      // Flat ×1.12 on top of the existing calm→harsh curve — a uniform +12% across
+      // every generation (the resonance compensation above already cut every note
+      // by ~25-55% depending on the mood's floor, even on calm rolls, so grid had
+      // drifted quieter than the drums overall). Multiplying the whole formula
+      // (not just raising the "1.0") preserves the calm-vs-harsh ratio exactly.
+      if (igGlueMakeup) igGlueMakeup.gain.setTargetAtTime((1.0 - harsh * 0.38) * 1.12, t2, 0.10);  // warm ~1.12 → harsh ~0.69
       if (igSoftShelf)  igSoftShelf.gain.setTargetAtTime(-3.5 - harsh * 3.5, t2, 0.10);    // -3.5 → ~-7 dB highs
     }
   }
@@ -10196,10 +10428,16 @@ $$('randRefresh').addEventListener('click', (e) => {
         const idx = rng() * pool.length | 0;
         const p = pool.splice(idx, 1)[0];
         note.lfo = note.lfo || {};
+        // Cut-LFO depth scales the filter's own cutoff (spawnLfo's depthScale is
+        // `cut`), so a wide sweep (depth→0.9) on an already-resonant note (Q up
+        // to 5.5 on moods like deep_stab) swings a high-Q peak across a wide
+        // frequency range — that's a resonant "scream", not just brightness.
+        // Damp the sweep as resonance climbs so the two don't compound; a calm,
+        // low-resonance note keeps the full sweep range untouched.
+        const resHot = p === 'cut' ? Math.max(0, Math.min(1, (note.resonance - 3.0) / 3.0)) : 0;
         note.lfo[p] = {
           rate: Math.max(0.05, patternLfoBase * rngR(0.7, 1.4)),
-          // deeper sweep on the filter — modulation carries the interest, not melody
-          depth: p === 'cut' ? rngR(0.45, 0.9) : rngR(0.28, 0.68),
+          depth: p === 'cut' ? rngR(0.45, 0.9) * (1 - resHot * 0.5) : rngR(0.28, 0.68),
           shape: patternLfoShape,
         };
       }
@@ -10902,7 +11140,6 @@ function openShiftPanel() {
   if (shiftActive) return;
   shiftActive = true;
   $$('viz-cv').style.display = 'none';
-  $$('session-row').style.display = 'none';
   $$('wave-panel').style.display = 'flex';
   $$('fx-panel-1').style.display = fxTab === 1 ? 'flex' : 'none';
   $$('fx-panel-2').style.display = fxTab === 2 ? 'flex' : 'none';
@@ -10917,7 +11154,6 @@ function closeShiftPanel() {
   shiftActive = false;
   fxLocked    = false;
   $$('viz-cv').style.display = '';
-  $$('session-row').style.display = '';
   $$('wave-panel').style.display = 'none';
   $$('shift-hint').style.color = '';
   updateFxTabBtns();
@@ -13473,21 +13709,31 @@ window.asgOnGridGenerate = (info = {}) => {
   bmSetSlider('revbSlider', reverb * 100 + 15 + jit(4));
   // Volume — supportive bed level: present, but under the grid (stays minimal).
   bmSetSlider('volSlider', 22 + reverb * 8 + jit(2));
-  // Shimmer — more upper-harmonic halo when grid is dark, less when it's bright.
-  bmSetSlider('shmrSlider', 15 + (1 - bright) * 35 + jit(6));
   // Tail-hold — vary 0.3–0.8s so released pads don't all decay identically.
   bmAdsr.h = 0.3 + R() * 0.5;
   // Voice — usually the brightness-matched pick; ~1 in 4 generates draws a
   // complementary alternate from a small style-safe pool for timbral variety.
+  // Triangle was the fallback in BOTH the mid-brightness case below and both
+  // pools, so it was quietly the most common voice — now it's a deliberate,
+  // very rare pick instead (~4%) rather than the default.
   const baseVoice =
     style === 'bowl'              ? 'bowl' :
     /chime|glass|bell/.test(style) ? 'glass' :
     (style === 'air' || /string/.test(style)) ? 'reed' :
     (!staccato && bright < 0.35) ? 'sawtooth' :
     bright > 0.6                 ? 'sine' :
-    'triangle';
-  const voicePool = bright > 0.5 ? ['sine', 'triangle', 'glass'] : ['triangle', 'sawtooth', 'reed', 'bowl'];
-  bmSetWave(R() < 0.25 ? voicePool[(R() * voicePool.length) | 0] : baseVoice);
+    'reed';
+  const voicePool = bright > 0.5 ? ['sine', 'glass'] : ['sawtooth', 'reed', 'bowl'];
+  let voiceChoice = R() < 0.25 ? voicePool[(R() * voicePool.length) | 0] : baseVoice;
+  if (R() < 0.04) voiceChoice = 'triangle';   // very rare, deliberate
+  bmSetWave(voiceChoice);
+  // Shimmer — more upper-harmonic halo when grid is dark, less when it's bright.
+  // Leveling: sine/glass are already the brightest voices, so a positive shimmer
+  // jitter on top of one would compound into a brighter-than-intended pass —
+  // damp the jitter (not the base shimmer) when one of those gets picked.
+  let shmrJit = jit(6);
+  if ((voiceChoice === 'sine' || voiceChoice === 'glass') && shmrJit > 0) shmrJit *= 0.4;
+  bmSetSlider('shmrSlider', 15 + (1 - bright) * 35 + shmrJit);
   // Auto-burst flavor — occasionally (30%) re-bias halo/deep toward the grid's
   // darkness, so a long jam wanders register without overriding a manual pick often.
   if (R() < 0.3) {
