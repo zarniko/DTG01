@@ -19,11 +19,25 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :focus { outline: none; }
     :focus-visible { outline: none; }
-    .kbnav-focus { outline: 1px solid var(--accent) !important; outline-offset: 1px; box-shadow: none !important; }
-    .kbnav-focus.kbnav-edit { outline-width: 2px !important; }
-    .kbnav-focus[type="range"] { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 6px; }
-    .kbnav-focus.kbnav-edit[type="range"] { outline-width: 2px !important; }
-    #ig-grid.kbnav-focus, #ig-spiral-cv.kbnav-focus, #dr-grid.kbnav-focus { box-shadow: none; outline: 1px solid var(--accent) !important; outline-offset: 2px; }
+    /* Default: a bottom-only underline, for plain buttons that have no border of
+       their own (page numbers, play/stop, tui-btn, etc.) — a full box on a
+       borderless button reads as a separate added frame, not a focus cue. */
+    .kbnav-focus { outline: none; box-shadow: 0 1px 0 0 var(--accent) !important; }
+    .kbnav-focus.kbnav-edit { box-shadow: 0 2px 0 0 var(--accent) !important; }
+    /* Full 4-side box instead for elements that already carry their own border
+       (selects, mute/solo + other bordered toggle buttons) — the focus ring then
+       matches the shape they already read as, plus sliders (explicit request to
+       leave those as a full box regardless). */
+    select.kbnav-focus, .dr-lane-tog.kbnav-focus, .tui-action.kbnav-focus,
+    .kbnav-focus[type="range"] {
+      outline: 1px solid var(--accent) !important; outline-offset: 1px; box-shadow: none !important;
+    }
+    select.kbnav-focus.kbnav-edit, .dr-lane-tog.kbnav-focus.kbnav-edit, .tui-action.kbnav-focus.kbnav-edit,
+    .kbnav-focus.kbnav-edit[type="range"] {
+      outline-width: 2px !important;
+    }
+    .kbnav-focus[type="range"] { outline-offset: 6px; }
+    #ig-grid.kbnav-focus, #ig-spiral-cv.kbnav-focus, #dr-grid.kbnav-focus { box-shadow: none !important; outline: 1px solid var(--accent) !important; outline-offset: 2px; }
     /* .dr-seq-group scrolls (overflow-x: auto), which clips the outward outline-offset
        above — draw the drum grid's focus ring inset instead so it stays visible. */
     #dr-grid.kbnav-focus { outline-offset: -2px; }
@@ -285,7 +299,6 @@
     }
     .btn-action:disabled { color: rgba(255,255,255,0.12); cursor: default; pointer-events: none; }
     .btn-action.active:disabled { text-shadow: none; }
-    .s-brk { letter-spacing: 0; color: var(--dim); flex-shrink: 0; font-size: 12px; }
     .footer {
       display: flex; justify-content: space-between; align-items: baseline;
       margin-top: 6px; letter-spacing: 0;
@@ -314,7 +327,6 @@
       input[type=range]::-moz-range-thumb     { width: 24px !important; height: 24px !important; border-radius: 50%; border: none; background: var(--accent); }
       input[type=range]::-moz-range-track     { height: 4px !important; background: rgba(255,255,255,0.22); border-radius: 2px; }
       .btn-action, .tui-btn, .app-toggle-btn, .page-btn, .copy-btn, .btn-play, #gs-hbtn, #ig-hbtn, #bm-hbtn, #app-help-btn, #app-zko { min-height: 44px; display: inline-flex; align-items: center; }
-      .s-brk { padding: 10px 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 32px; }
     }
 
 
@@ -682,7 +694,6 @@
       #ig-panel input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; border: none; background: var(--accent); }
       #ig-panel input[type=range]::-moz-range-track { height: 3px; background: rgba(255,255,255,0.22); border-radius: 2px; }
       #ig-fxTab1Btn, #ig-fxTab2Btn { padding: 10px 14px; margin: -10px -6px; }
-      #ig-panel .hdr-mid .s-brk { padding: 10px 6px; cursor: pointer; }
     }
     .btn-play, .tui-btn, .tui-action, .page-btn, .copy-btn, #ig-hbtn, #app-zko { touch-action: manipulation; }
     #ig-randRefresh, #ig-clearRefresh { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -1378,9 +1389,7 @@
   <div class="hdr">
     <div class="hdr-left"><div id="ig-pageBar"></div></div>
     <div class="hdr-mid" style="display:none;">
-      <span class="s-brk" id="ig-bpmDec">◄</span>
       <input type="range" id="ig-bpmSlider" min="40" max="240" value="126" step="1">
-      <span class="s-brk" id="ig-bpmInc">►</span>
       <span class="ctrl-val" id="ig-bpmVal">126</span>
       <button class="btn-play" id="ig-playBtn" tabindex="-1">start</button>
     </div>
@@ -1469,9 +1478,7 @@
 
       <div class="ctrl-row slider" title="Master volume — overall output level of the sequencer">
         <span class="ctrl-key">mvol</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="ig-mvolSlider" min="0" max="100" value="100" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="ig-mvolVal">80%</span>
       </div>
       <div class="ctrl-gap"></div>
@@ -1502,9 +1509,7 @@
 
       <div class="ctrl-row slider" style="margin-top:6px;" title="Transpose — shifts all note pitches up or down in semitones (±24 = ±2 octaves)">
         <span class="ctrl-key">xpose</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="ig-transposeSlider" min="-24" max="24" value="0" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="ig-transposeVal">0</span>
       </div>
 
@@ -1530,72 +1535,52 @@
           <div id="ig-fx-panel-1-lbl" style="letter-spacing:2px; color:rgba(255,255,255,0.25); font-size:11px; margin-bottom:4px;">per note</div>
           <div class="ctrl-row slider" title="Volume — loudness of this note relative to others">
             <span class="ctrl-key">vol</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-volSlider" min="0" max="100" value="70" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-volVal">70%</span>
           </div>
           <div class="ctrl-row slider" data-lfo="atk" title="Attack — how quickly the note fades in from silence, in milliseconds">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-atk" data-param="atk">atk<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-atkSlider" min="0" max="300" value="6" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-atkVal">6ms</span>
           </div>
           <div class="ctrl-row slider" data-lfo="det" title="Detune — pitch offset in cents (100¢ = 1 semitone). Adds subtle pitch variation per note">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-det" data-param="det">det<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-detSlider" min="0" max="50" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-detVal">0¢</span>
           </div>
           <div class="ctrl-row slider" data-lfo="pan" title="Panning — stereo position from far left (L) to far right (R)">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-pan" data-param="pan">pan<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-panSlider" min="-50" max="50" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-panVal">C</span>
           </div>
           <div class="ctrl-row slider" data-lfo="cut" title="Cutoff — low-pass filter cutoff frequency. Reduces high-frequency content when lowered">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-cut" data-param="cut">cut<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-cutSlider" min="0" max="100" value="100" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-cutVal">open</span>
           </div>
           <div class="ctrl-row slider" data-lfo="res" title="Resonance — filter Q factor. Boosts frequencies near the cutoff point for a resonant peak">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-res" data-param="res">res<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-resSlider" min="0" max="100" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-resVal">1.0</span>
           </div>
           <div class="ctrl-row slider" data-lfo="dst" title="Distortion — waveshaper overdrive. Adds harmonic saturation and grit to the note">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-dst" data-param="dst">dst<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-dstSlider" min="0" max="100" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-dstVal">0%</span>
           </div>
           <div class="ctrl-row slider" data-lfo="dly" title="Delay — send level to the delay effect. Creates echoing repetitions">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-dly" data-param="dly">dly<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-dlySlider" min="0" max="100" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-dlyVal">0%</span>
           </div>
           <div class="ctrl-row slider" data-lfo="rev" title="Reverb — send level to the reverb effect. Adds spatial depth and tail to the note">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-rev" data-param="rev">rev<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-revSlider" min="0" max="100" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-revVal">0%</span>
           </div>
           <div class="ctrl-row slider" data-lfo="prb" title="Probability — chance (0–100%) that this note fires on each sequencer pass. Creates generative variation">
             <span class="ctrl-key lfo-toggle" id="ig-lfo-lbl-prb" data-param="prb">prb<span class="lfo-chev">›</span></span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-probSlider" min="0" max="100" value="100" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-probVal">100%</span>
           </div>
           <div class="ctrl-row" style="margin-top:6px;">
@@ -1608,37 +1593,27 @@
           <div style="letter-spacing:2px; color:rgba(255,255,255,0.25); font-size:11px; margin-bottom:4px;">global</div>
           <div class="ctrl-row slider" title="Reverb level — global reverb wet mix applied across all notes">
             <span class="ctrl-key">rvl</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-rvlSlider" min="0" max="100" value="70" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-rvlVal">70%</span>
           </div>
           <div class="ctrl-row slider" title="High-pass filter — removes frequencies below the cutoff. Thins out low-end content">
             <span class="ctrl-key">hpf</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-hpfSlider" min="0" max="100" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-hpfVal">open</span>
           </div>
           <div class="ctrl-row slider" title="Low-pass filter — removes frequencies above the cutoff. Darkens and softens the sound">
             <span class="ctrl-key">lpf</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-lpfSlider" min="0" max="100" value="100" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-lpfVal">open</span>
           </div>
           <div class="ctrl-row slider" title="Tremolo — amplitude modulation rate. Creates a rhythmic volume pulsing effect across all notes">
             <span class="ctrl-key">trm</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-trmSlider" min="0" max="80" value="0" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-trmVal">off</span>
           </div>
           <div class="ctrl-row slider" title="Feedback — delay feedback percentage. Higher values create longer, more sustained echo trails">
             <span class="ctrl-key">fdb</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="ig-fdbSlider" min="0" max="90" value="35" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="ig-fdbVal">35%</span>
           </div>
           <div class="ctrl-row" style="margin-top:6px;">
@@ -1825,16 +1800,12 @@
     <button class="btn-play" id="dr-playBtn" tabindex="-1">start</button>
     <div class="ctrl-row slider dr-bpm" style="flex:0 0 auto; gap:6px; min-width:0;" title="Tempo (BPM) — the shared transport for the drum machine, grid, granular and bloom">
       <span class="ctrl-key" style="width:auto;">bpm</span>
-      <span class="s-brk" id="dr-bpmDec">◄</span>
       <input type="range" id="dr-bpmSlider" min="40" max="240" value="126" step="1" style="width:90px; flex:0 0 90px;">
-      <span class="s-brk" id="dr-bpmInc">►</span>
       <span class="ctrl-val" id="dr-bpmVal" style="min-width:32px;">126</span>
     </div>
     <div class="ctrl-row slider" style="flex:1; min-width:200px;" title="Drum bus volume — overall level of the drum machine, independent from the melodic grid and granular engines. Turn this down so granular textures aren't drowned out by the drums">
       <span class="ctrl-key">vol</span>
-      <span class="s-brk">◄</span>
       <input type="range" id="dr-masterVol" min="0" max="100" value="100" step="1">
-      <span class="s-brk">►</span>
       <span class="ctrl-val" id="dr-masterVolVal">100%</span>
     </div>
     <span class="page-sep">|</span>
@@ -1873,18 +1844,14 @@
         <!-- global dub return — outside #dr-fx-panel so it stays active without a hit selected -->
         <div class="ctrl-row slider" id="dr-dubRow" title="Dub return — overall wet level of the tempo-synced delay + reverb space. Per-hit 'dub' sends decide WHAT echoes; this sets HOW MUCH comes back. Double-click resets to the atmosphere default.">
           <span class="ctrl-key">dub</span>
-          <span class="s-brk">◄</span>
           <input type="range" id="dr-dubSlider" min="0" max="100" value="14" step="1">
-          <span class="s-brk">►</span>
           <span class="ctrl-val" id="dr-dubVal" style="min-width:46px">14%</span>
         </div>
         <div id="dr-fx-panel" class="tab-a-disabled">
           <div style="letter-spacing:2px; color:rgba(255,255,255,0.25); font-size:11px; margin:8px 0 6px;">lane</div>
           <div class="ctrl-row slider" id="dr-laneLoopRow" title="Loop length — how many steps this lane cycles before repeating. 16 = full bar; shorter (odd lengths like 7/9/11) phase against the 16-step kick for the rolling, hypnotic feel. Double-click to reset to full.">
             <span class="ctrl-key">loop</span>
-            <span class="s-brk">◄</span>
             <input type="range" id="dr-laneLoop" min="1" max="16" value="16" step="1">
-            <span class="s-brk">►</span>
             <span class="ctrl-val" id="dr-laneLoopVal" style="min-width:46px">full</span>
           </div>
           <div id="dr-fx-panel-lbl" style="letter-spacing:2px; color:rgba(255,255,255,0.25); font-size:11px; margin:8px 0 6px;">per hit</div>
@@ -5855,7 +5822,7 @@ const ATMOSPHERES = {
       drone: { level: 0.45, type: 'sawtooth', intervals: [1, 1.5, 2],   cutoff: 900,  drift: 0.40, driftRate: 0.06 },
       sub:   { level: 0.45 },
       noise: { level: 0.005, type: 'bandpass', freq: 2500, q: 0.8 },
-      drive: 0.14, reverb: 0.30,
+      drive: 0.10, reverb: 0.30,
       lfo: { static: { bars: 8, depth: 0.9, shape: 'sine' } } } },
   // spacey / cavernous: airy high pad, long reverb tail, sparse hiss
   expanse: {
@@ -5885,7 +5852,7 @@ const ATMO_PARAMS = [
   { key: 'pad',    label: 'pad',    lfo: true,  get: a => a.drone.level, set: (a, v) => a.drone.level = v },
   { key: 'sub',    label: 'sub',    lfo: true,  get: a => a.sub.level,   set: (a, v) => a.sub.level = v },
   { key: 'static', label: 'static', lfo: true,  get: a => a.noise.level, set: (a, v) => a.noise.level = v, step: 0.1, dec: 1, max: 3 },
-  { key: 'drive',  label: 'drive',  lfo: false, get: a => a.drive,       set: (a, v) => a.drive = v },
+  { key: 'drive',  label: 'drive',  lfo: true,  get: a => a.drive,       set: (a, v) => a.drive = v },
   { key: 'space',  label: 'space',  lfo: true,  get: a => a.reverb,      set: (a, v) => a.reverb = v },
 ];
 // Which audio-graph AudioParam each LFO-able row modulates, and the peak swing
@@ -5907,7 +5874,24 @@ const barsToHz = bars => (S.bpm || 120) / (240 * Math.max(0.25, bars));
 const atmoLfoHz = cfg => cfg.bars ? barsToHz(cfg.bars) : cfg.rate;
 // (Re)build the continuous LFO feeding one param's target. Tears down the old one.
 function applyAtmoLfo(key) {
-  if (!atmo || !audioCtx || !ATMO_LFO_TARGET[key]) return;
+  if (!atmo || !audioCtx) return;
+  if (key === 'drive') {
+    if (_driveLfoTimer) { clearInterval(_driveLfoTimer); _driveLfoTimer = null; }
+    const cfg = (atmoCfg().lfo || {}).drive;
+    const hz = cfg ? atmoLfoHz(cfg) : 0;
+    if (!cfg || hz <= 0 || cfg.depth <= 0) { atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effectiveDriveAmount())); return; }
+    const period = 1 / hz, t0 = audioCtx.currentTime;
+    _driveLfoTimer = setInterval(() => {
+      if (!atmo || !audioCtx) return;
+      const tSec = audioCtx.currentTime - t0;
+      const phase01 = (tSec % period) / period;
+      const wave = _driveLfoWave(cfg.shape, phase01, tSec, hz);
+      const mod  = 1 + wave * cfg.depth * 0.85;   // long fade between ~15%-185% of the effective amount
+      atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effectiveDriveAmount() * Math.max(0.04, mod)));
+    }, 80);
+    return;
+  }
+  if (!ATMO_LFO_TARGET[key]) return;
   const old = atmo.lfoNodes[key];
   if (old) { try { old.src.stop(); old.src.disconnect(); old.dg.disconnect(); } catch (_) {} atmo.lfoNodes[key] = null; }
   const cfg = (atmoCfg().lfo || {})[key];
@@ -5925,7 +5909,7 @@ function applyAtmoLfo(key) {
   if (water) node.start(audioCtx.currentTime, Math.random() * 12); else node.start();
   atmo.lfoNodes[key] = { src: node, dg };
 }
-function applyAllAtmoLfo() { Object.keys(ATMO_LFO_TARGET).forEach(applyAtmoLfo); }
+function applyAllAtmoLfo() { ATMO_PARAMS.filter(p => p.lfo).forEach(p => applyAtmoLfo(p.key)); }
 
 function buildAtmosphere() {
   if (!audioCtx || atmo) return;
@@ -5998,28 +5982,58 @@ function applyAtmosphere(ramp) {
   // white noise reads hot, so scale the static slider well down — keeps it a
   // background texture even toward the top of its range
   atmo.noiseMix.gain.setTargetAtTime(a.noise.level * ATMO_STATIC_GAIN, t, S2);
-  // Drive itself (a.drive) is a fixed per-atmosphere amount and never varies
-  // within a song — but rollAtmosphere() DOES randomize how much signal (drone +
-  // sub + static level) feeds into that same fixed waveshaper. A roll that lands
-  // toward the hot end of those ranges pushes more into the saturator and comes
-  // out audibly harsher, even though "drive" itself reads unchanged. Compensate
-  // by easing the effective amount down as the bed gets hotter, so the harshest
-  // rolls get pulled back toward the calmer ones instead of spiking. (Static's
-  // own LFO swell scales with its base level too, so this also catches that.)
-  const bedHot   = Math.max(0, Math.min(1, (
+  atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effectiveDriveAmount()));
+  atmo.revGain.gain.setTargetAtTime(a.reverb, t, S2);
+}
+// Drive itself (a.drive) is a fixed per-atmosphere amount and never varies
+// within a song — but rollAtmosphere() DOES randomize how much signal (drone +
+// sub + static level) feeds into that same fixed waveshaper. A roll that lands
+// toward the hot end of those ranges pushes more into the saturator and comes
+// out audibly harsher, even though "drive" itself reads unchanged. Compensate
+// by easing the effective amount down as the bed gets hotter, so the harshest
+// rolls get pulled back toward the calmer ones instead of spiking. (Static's
+// own LFO swell scales with its base level too, so this also catches that.)
+// Shared by applyAtmosphere() and the drive LFO tick below.
+function effectiveDriveAmount() {
+  const a = atmoCfg();
+  const bedHot = Math.max(0, Math.min(1, (
     (a.drone.level - 0.40) / 0.30 +
     (a.sub.level   - 0.30) / 0.30 +
     (a.noise.level - 0.002) / 0.008
   ) / 3));
-  const effDrive = a.drive * (1 - bedHot * 0.35);
-  atmo.drive.curve = _drumDriveCurve(Math.max(0.001, effDrive));
-  atmo.revGain.gain.setTargetAtTime(a.reverb, t, S2);
+  return a.drive * (1 - bedHot * 0.35);
+}
+// Drive LFO — a slow fade in/out of the bed's grit. Unlike the other LFO-able
+// params, drive shapes a WaveShaperNode's static .curve, not a continuous
+// AudioParam, so it can't be modulated with an audio-rate oscillator the way
+// pad/sub/static/space are. Instead, a slow JS-driven timer recomputes the
+// curve a few times a second — at the multi-second/multi-bar rates these LFOs
+// run at, that reads as perfectly smooth, just implemented differently.
+let _driveLfoTimer = null;
+function _driveLfoWave(shape, phase01, tSec, hz) {
+  if (shape === 'square')   return phase01 < 0.5 ? 1 : -1;
+  if (shape === 'triangle') return 1 - 4 * Math.abs(((phase01 + 0.25) % 1) - 0.5);
+  if (shape === 'water' || shape === 'drift') {
+    // Mirrors _waterLfoBuffer's recipe (a few incommensurate slow sines) so
+    // drive's "water" shape drifts the same aperiodic way the other params'
+    // water shape does, without needing to sample that buffer from JS.
+    const freqs = [0.07, 0.11, 0.17, 0.23, 0.31].map(f => f * (hz / 0.18));
+    const amps  = [1, 0.62, 0.42, 0.27, 0.17];
+    let v = 0, norm = 0;
+    for (let i = 0; i < freqs.length; i++) { v += amps[i] * Math.sin(2 * Math.PI * freqs[i] * tSec + i * 1.7); norm += amps[i]; }
+    return v / norm;
+  }
+  return Math.sin(phase01 * 2 * Math.PI);   // sine (default)
 }
 // Gate the bed: only sounds while the transport runs and the drums are on.
 function updateAtmoLevel() {
   if (!atmo || !audioCtx) return;
   const on = S.playing && TECHNO.on;
-  const lvl = on ? atmoCfg().master : 0;
+  // Follow the song's own arc — swell a little in sparse sections (breakdown/
+  // intro/outro), ease back in dense ones (peak/build), so the bed isn't a flat
+  // level regardless of what the kit is doing.
+  const arcMul = on ? asgArcFactor(window.asgGetDrumArc?.().density) : 1;
+  const lvl = on ? atmoCfg().master * arcMul : 0;
   atmo.master.gain.setTargetAtTime(lvl, audioCtx.currentTime, on ? 0.5 : 0.25);
 }
 // Switch the whole vibe: drum style, dub send, and the atmosphere bed together.
@@ -6120,20 +6134,18 @@ function buildAtmoPanel() {
     let h = `
       <div class="ctrl-row slider">
         <span class="${labelCls}" data-atmolfo="${pm.lfo ? pm.key : ''}">${pm.label}${chev}</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="dr-atmo-${pm.key}" min="0" max="${pm.max || 100}" value="0" step="${pm.step || 1}">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="dr-atmo-${pm.key}-val" style="min-width:42px">0%</span>
       </div>`;
     if (pm.lfo) {
       h += `
       <div class="lfo-panel" id="dr-atmolfo-panel-${pm.key}">
-        <div class="ctrl-row slider"><span class="lfo-sub-key">rate</span><span class="s-brk">◄</span>
+        <div class="ctrl-row slider"><span class="lfo-sub-key">rate</span>
           <input type="range" id="dr-atmolfo-${pm.key}-rate" min="0" max="100" value="0" step="1">
-          <span class="s-brk">►</span><span class="ctrl-val" id="dr-atmolfo-${pm.key}-rate-val" style="min-width:44px">off</span></div>
-        <div class="ctrl-row slider"><span class="lfo-sub-key">dpt</span><span class="s-brk">◄</span>
+          <span class="ctrl-val" id="dr-atmolfo-${pm.key}-rate-val" style="min-width:44px">off</span></div>
+        <div class="ctrl-row slider"><span class="lfo-sub-key">dpt</span>
           <input type="range" id="dr-atmolfo-${pm.key}-depth" min="0" max="100" value="0" step="1">
-          <span class="s-brk">►</span><span class="ctrl-val" id="dr-atmolfo-${pm.key}-depth-val" style="min-width:44px">0%</span></div>
+          <span class="ctrl-val" id="dr-atmolfo-${pm.key}-depth-val" style="min-width:44px">0%</span></div>
         <div class="ctrl-row" style="gap:4px;align-items:center;">
           <span class="lfo-sub-key">shp</span>
           <button class="tui-btn atmo-lfo-shape sel" data-p="${pm.key}" data-shape="sine"     tabindex="-1">sin</button>
@@ -6210,7 +6222,7 @@ function rollAtmosphere() {
     : { rate: 0, depth: 0, shape: 'sine' }; };
   // static always breathes in & out; the rest are occasional
   a.lfo.static = { bars: pickBars([8, 12, 16]), depth: +rng(0.80, 1.0).toFixed(2), shape: R() < 0.5 ? 'water' : 'sine' };
-  rollL('pad', 0.5); rollL('space', 0.45); rollL('sub', 0.3);
+  rollL('pad', 0.5); rollL('space', 0.45); rollL('sub', 0.3); rollL('drive', 0.35);
   applyAtmosphere(); applyAllAtmoLfo(); reflectAtmoUI();
 }
 
@@ -6901,16 +6913,12 @@ function buildLfoPanels() {
     panel.innerHTML = `
       <div class="ctrl-row slider">
         <span class="lfo-sub-key">rate</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="ig-lfo-${param}-rate" min="0" max="200" value="0" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="ig-lfo-${param}-rate-val" style="min-width:42px">off</span>
       </div>
       <div class="ctrl-row slider">
         <span class="lfo-sub-key">dpt</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="ig-lfo-${param}-depth" min="0" max="100" value="0" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="ig-lfo-${param}-depth-val" style="min-width:42px">0%</span>
       </div>
       <div class="ctrl-row" style="gap:4px;align-items:center;">
@@ -7918,7 +7926,12 @@ function makeTechnoPage() {
 // style — never touches which steps are on. Shared by regen() (which rolls a
 // fresh pattern, then calls this) and TECHNO.reshadeFx() (which re-shades the
 // EXISTING pattern's fx coat after an atmosphere switch).
-function programHitFx(L, dub) {
+// `kickVar` is a song-level kick personality {ptch, snap, decay} — rolled once
+// per song (or per standalone generate) by regen(), not per-hit, so every kick
+// in a track shares the same character but it varies generate to generate.
+// Kept subtle (±2 semitones, modest click/decay range) so it's still
+// unmistakably the same kick — a personality nudge, not a new drum.
+function programHitFx(L, dub, kickVar = null) {
   const R = () => Math.random();
   const rng = (lo, hi) => lo + Math.random() * (hi - lo);
   const pick = a => a[(Math.random() * a.length) | 0];
@@ -7939,7 +7952,12 @@ function programHitFx(L, dub) {
   };
 
   for (let c = 0; c < COLS; c++) {
-    if (L.kick1[c]) { fx.decayMul.kick1[c] = rng(1.15, 1.45); fx.filt.kick1[c] = rng(-0.30, -0.10); }
+    if (L.kick1[c]) {
+      fx.decayMul.kick1[c] = rng(1.15, 1.45) * (kickVar?.decay ?? 1);
+      fx.filt.kick1[c]  = rng(-0.30, -0.10);
+      fx.ptch.kick1[c]  = kickVar?.ptch ?? 0;
+      fx.snap.kick1[c]  = kickVar?.snap ?? 0;
+    }
     if (L.kick2[c]) {
       fx.decayMul.kick2[c] = rng(1.2, 1.6);
       fx.ptch.kick2[c] = pick([-2, -1, 0]);
@@ -8048,6 +8066,12 @@ const TECHNO = {
     const flavor      = song?.flavor || 'hypnotic';
     const hatBias     = song?.hatBias ?? 0.5;
     const ridePresent = song ? song.ridePresent : true;
+    // Kick personality — rolled once per song (or once per standalone generate),
+    // not per-hit, so every kick in a track shares it but it varies generate to
+    // generate. Subtle: ±2 semitones, a touch of extra click, ±20% decay length.
+    const kickVar = song
+      ? { ptch: song.kickPtch, snap: song.kickSnap, decay: song.kickDecay }
+      : { ptch: pick([-2, -1, 0, 0, 0, 1, 2]), snap: rng(0, 0.30), decay: rng(0.85, 1.20) };
     const Z = () => new Array(COLS).fill(0);
     const L = {}; TECHNO_LANE_KEYS.forEach(k => L[k] = Z());
 
@@ -8214,7 +8238,7 @@ const TECHNO = {
     // Per-hit fx coat (crush/drive/filt/decayMul/pan/prob/send/hitLfo) — shared
     // with reshadeFx() below, which re-runs this same pass on an EXISTING
     // pattern after an atmosphere switch (see programHitFx).
-    const fx = programHitFx(L, dub);
+    const fx = programHitFx(L, dub, kickVar);
 
     // ── Industrial / dark accents — rare crushed, distorted metallic or sub-impact
     // hits that punctuate the track at sparse moments. Placed after the fx pass so
@@ -8601,23 +8625,21 @@ function buildDrFxPanel() {
     let h = `
       <div class="ctrl-row slider" data-drfx="${pm.key}" title="${pm.title}">
         <span class="${labelCls}" data-drlfo="${pm.lfo ? pm.key : ''}">${pm.label}${chev}</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="dr-fx-${pm.key}" min="${pm.min}" max="${pm.max}" value="${pm.def}" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="dr-fx-${pm.key}-val" style="min-width:46px">${pm.fmt(pm.def)}</span>
       </div>`;
     if (pm.lfo) {
       h += `
       <div class="lfo-panel" id="dr-lfo-panel-${pm.key}">
         <div class="ctrl-row slider">
-          <span class="lfo-sub-key">rate</span><span class="s-brk">◄</span>
+          <span class="lfo-sub-key">rate</span>
           <input type="range" id="dr-lfo-${pm.key}-rate" min="0" max="200" value="0" step="1">
-          <span class="s-brk">►</span><span class="ctrl-val" id="dr-lfo-${pm.key}-rate-val" style="min-width:44px">off</span>
+          <span class="ctrl-val" id="dr-lfo-${pm.key}-rate-val" style="min-width:44px">off</span>
         </div>
         <div class="ctrl-row slider">
-          <span class="lfo-sub-key">dpt</span><span class="s-brk">◄</span>
+          <span class="lfo-sub-key">dpt</span>
           <input type="range" id="dr-lfo-${pm.key}-depth" min="0" max="100" value="0" step="1">
-          <span class="s-brk">►</span><span class="ctrl-val" id="dr-lfo-${pm.key}-depth-val" style="min-width:44px">0%</span>
+          <span class="ctrl-val" id="dr-lfo-${pm.key}-depth-val" style="min-width:44px">0%</span>
         </div>
         <div class="ctrl-row" style="gap:4px;align-items:center;">
           <span class="lfo-sub-key">shp</span>
@@ -8865,6 +8887,7 @@ function switchDrPage(i) {
   drPageBtns.forEach((btn, idx) => btn.classList.toggle('active', idx === i));
   clearDrSel();
   renderDrAll();
+  updateAtmoLevel();   // the new page may have a different arc density — re-level the bed
 }
 
 document.getElementById('dr-masterVol').addEventListener('input', function () {
@@ -8902,8 +8925,6 @@ document.getElementById('dr-dubSlider').addEventListener('input', function () {
   document.getElementById('dr-dubVal').textContent = this.value + '%';
 });
 document.getElementById('dr-dubSlider').addEventListener('dblclick', () => applyDubSend());
-document.getElementById('dr-bpmDec').addEventListener('click', () => applyBpm(S.bpm - 1));
-document.getElementById('dr-bpmInc').addEventListener('click', () => applyBpm(S.bpm + 1));
 
 // Auto-compose state — declared before buildDrPageBar() so the `auto` button it
 // creates can bind to drAutoBtn / drStartProgression (defined further below).
@@ -9103,6 +9124,23 @@ function applyPendingAtmosphere() {
 // keeping each one distinct (same trick the grid song generator uses).
 const DR_PAGE_ROTS = [0, 2, 5, 7, 11, 13, 3, 6];
 
+// Per-page {role, d (density), fill, drop} for the currently composed song (see
+// composeDrSong below) — lets other engines (atmosphere, bloom) follow the
+// track's own arc instead of only reacting to their own independent rolls.
+let _drSongArc = null;
+window.asgGetDrumArc = () => {
+  const sec = _drSongArc?.[TECHNO.page];
+  return { role: sec?.role ?? null, density: sec?.d ?? 1 };
+};
+// Sparse sections (breakdown/intro/outro, low density) get room for the bed/
+// pads to swell forward; dense sections (peak/build) ease them back so they
+// don't compete with a busy kit. Continuous on density, not a role lookup
+// table, so it tracks each song's own jittered densities. Modest range — a
+// nudge, not a remix (matches this app's "minimal background" preference).
+function asgArcFactor(density) {
+  return Math.max(0.8, Math.min(1.15, 1.0 + (0.5 - (density ?? 1)) * 0.4));
+}
+
 // ── §DR01:song  Song composition (makeDrArc · composeDrSong · publishes asgDrumRhythm) + auto-progression ──
 // Build a fresh 8-page arc. The breakdown lands on page 5 or 6, section densities
 // jitter, and fills fall before section changes (+ the odd extra), so the song
@@ -9198,12 +9236,20 @@ function composeDrSong() {
               : flavor === 'percussive' ? rnd(0.50, 0.72)
               : rnd(0.40, 0.65),
     ridePresent: Math.random() < (flavor === 'dubby' || flavor === 'sparse' ? 0.85 : 0.55),
+    // Kick personality for this song — subtle (±2 semitones, a touch of extra
+    // click, ±20% decay length), shared across all 8 pages so the kick stays
+    // consistent within the track but varies from one composed song to the next.
+    kickPtch:  pick([-2, -1, 0, 0, 0, 1, 2]),
+    kickSnap:  rnd(0, 0.30),
+    kickDecay: rnd(0.85, 1.20),
   };
   // Publish the rhythmic DNA so the grid can write euclidean counterpoint against
   // it (interlock in the drum's gaps, or lock to its accents). Shared rotation +
   // per-page offsets mean the two engines phase together across the 8 pages.
   window.asgDrumRhythm = { seedRot: dna.seedRot, rimK: dna.rimK, rideK: dna.rideK, polyK: dna.polyK, pageRots: DR_PAGE_ROTS };
-  makeDrArc(flavor).forEach((sec, i) => {
+  const arc = makeDrArc(flavor);
+  _drSongArc = arc;   // see asgGetDrumArc below — lets other engines follow the song's energy
+  arc.forEach((sec, i) => {
     TECHNO.page = i;
     TECHNO.regen(sec.d, { ...dna, page: i, pageRot: DR_PAGE_ROTS[i],
                           role: sec.role, fill: sec.fill, drop: sec.drop });
@@ -9887,9 +9933,6 @@ const playBtn = $$('playBtn');
 playBtn.addEventListener('click', () => S.playing ? stopSeq() : startSeq());
 
 $$('bpmSlider').addEventListener('input', function () { applyBpm(+this.value); });
-function nudgeBpm(delta) { applyBpm(S.bpm + delta); }
-$$('bpmDec').addEventListener('click', () => nudgeBpm(-1));
-$$('bpmInc').addEventListener('click', () => nudgeBpm(+1));
 $$('volSlider').addEventListener('input', function () {
   S.volume = this.value / 100;
   $$('volVal').textContent = `${this.value}%`;
@@ -13122,7 +13165,12 @@ function tickAuto() {
     const g = window.asgGetGranularLevels?.();
     // Busier mix → bloom recedes. It fills the quiet, it doesn't crowd.
     const activity = Math.min(1, (h?.density ?? 0) + (g?.active ? g.rms * 0.8 : 0));
-    const prob = AUTO_PROB_PER_BAR * (1 - activity * 0.85);
+    // Follow the drum song's own arc too — more likely to swell into a sparse
+    // breakdown/intro/outro, less likely during a dense peak/build, layered on
+    // top of the live-mix activity check above (both reasons to hold back stack).
+    const arc = window.asgGetDrumArc?.();
+    const arcMul = arc ? Math.max(0.5, Math.min(1.8, 1.0 + (0.5 - arc.density) * 1.2)) : 1;
+    const prob = AUTO_PROB_PER_BAR * (1 - activity * 0.85) * arcMul;
     if (bmAutoCooldown > 0) {
       bmAutoCooldown--;
     } else if (Math.random() < prob) {
@@ -13455,16 +13503,12 @@ function buildBmLfoPanels() {
     panel.innerHTML = `
       <div class="ctrl-row slider">
         <span class="lfo-sub-key">rate</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="bm-lfo-${param}-rate" min="0" max="100" value="0" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="bm-lfo-${param}-rate-val" style="min-width:42px">off</span>
       </div>
       <div class="ctrl-row slider">
         <span class="lfo-sub-key">dpt</span>
-        <span class="s-brk">◄</span>
         <input type="range" id="bm-lfo-${param}-depth" min="0" max="100" value="0" step="1">
-        <span class="s-brk">►</span>
         <span class="ctrl-val" id="bm-lfo-${param}-depth-val" style="min-width:42px">0%</span>
       </div>
       <div class="ctrl-row" style="gap:4px;align-items:center;">
