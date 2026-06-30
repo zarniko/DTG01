@@ -10424,7 +10424,9 @@ $$('randRefresh').addEventListener('click', (e) => {
 
   function makeAdsr() {
     if (prof.adsrStyle === 'long') {
-      return { a: rngR(0.18, 0.55), d: rngR(0.25, 0.55), s: rngR(0.22, 0.48), h: rngR(0.12, 0.35), r: rngR(0.60, 1.60) };
+      // hold+release trimmed so a note's tail fits within roughly a bar instead
+      // of spilling 1.5+ bars deep and stacking against the next loop pass.
+      return { a: rngR(0.18, 0.55), d: rngR(0.25, 0.55), s: rngR(0.22, 0.48), h: rngR(0.10, 0.30), r: rngR(0.45, 1.10) };
     }
     if (prof.adsrStyle === 'short') {
       return { a: rngR(0.04, 0.12), d: rngR(0.08, 0.18), s: rngR(0.35, 0.60), h: rngR(0.08, 0.20), r: rngR(0.08, 0.25) };
@@ -10444,7 +10446,12 @@ $$('randRefresh').addEventListener('click', (e) => {
       return { a: rngR(0.001, 0.003), d: rngR(1.50, 4.00), s: 0.001, h: 0, r: rngR(0.30, 0.80) };
     }
     if (prof.adsrStyle === 'bowl') {
-      return { a: rngR(0.20, 0.50), d: rngR(0.50, 1.50), s: rngR(0.40, 0.70), h: rngR(1.0, 3.0), r: rngR(1.50, 3.50) };
+      // Was up to 8.5s of hold+release alone — 2-4x a bar at this tempo, so tails
+      // from one loop pass were still ringing (unchecked for clashes) when the
+      // next pass fired, reading as busy/overpowering/dissonant. Trimmed so the
+      // total fits within roughly 1-2 bars, keeping the resonant "bowl" character
+      // without the runaway stacking.
+      return { a: rngR(0.20, 0.50), d: rngR(0.50, 1.50), s: rngR(0.40, 0.70), h: rngR(0.3, 0.9), r: rngR(0.7, 1.5) };
     }
     if (prof.adsrStyle === 'wood') {
       return { a: rngR(0.001, 0.003), d: rngR(0.20, 0.70), s: 0.001, h: 0, r: rngR(0.05, 0.15) };
@@ -10463,6 +10470,13 @@ $$('randRefresh').addEventListener('click', (e) => {
 
   function applyMoodFx(note, r) {
     if (!note) return;
+    // Sustained styles (bowl/long/air) ring long enough to read as near-continuous
+    // presence rather than a discrete hit, so the same peak volume reads louder
+    // overall than a short pluck at the same level — trim it back so it sits as a
+    // supporting layer instead of taking over the mix.
+    if (['bowl', 'long', 'air'].includes(prof.adsrStyle) && typeof note.vol === 'number') {
+      note.vol *= 0.7;
+    }
     if (rng() < prof.adsrChance) note.adsr = makeAdsr();
     if (prof.lfoParams.length && rng() < prof.lfoChance) {
       const nLfo = rng() < 0.35 ? 2 : 1;
@@ -10520,11 +10534,28 @@ $$('randRefresh').addEventListener('click', (e) => {
     return flat.length >= steps ? flat.slice(0, steps) : flat.concat(new Array(steps - flat.length).fill(0));
   }
 
+  // Minimal mode — cap a page at a small, deliberate handful of notes instead of
+  // a fuller pattern. Runs AFTER the normal layered generation (bass/motif/
+  // strategy/ghost) so the musical structure is untouched; it just trims down to
+  // size, keeping the loudest/most essential notes and cutting the quietest/most
+  // decorative ones first (ghost fills, thin voices) — reads as "fewer, more
+  // deliberate notes" rather than randomly punched holes.
+  function trimToMinimal(pageArr, maxNotes) {
+    const notes = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (pageArr[r][c]) notes.push({ r, c, vol: pageArr[r][c].vol || 0 });
+    if (notes.length <= maxNotes) return;
+    notes.sort((a, b) => b.vol - a.vol);   // loudest (most essential) first
+    for (let i = maxNotes; i < notes.length; i++) pageArr[notes[i].r][notes[i].c] = null;
+  }
+
   const [vMin, vMax] = prof.voiceCountRange;
 
-  // tailGuard extended the consonance check to neighbouring columns for the old
-  // heavy-drone ambient moods; none survive the techno-only mood set, so it's off.
-  const tailGuard = false;
+  // tailGuard extends the consonance check to neighbouring columns — needed for
+  // the sustained styles (bowl/long/air) where a note's tail can still be ringing
+  // when a neighbouring step fires, so a same-column-only check isn't enough to
+  // keep them from clashing. Short/plucky styles decay well before the next step
+  // anyway, so it's a no-op for them.
+  const tailGuard = ['bowl', 'long', 'air'].includes(prof.adsrStyle);
   // Plucked/articulate lead voices read as 'busy' when notes stack up, so give
   // them more room: no vertical layering and a thinner melodic layer.
   const plucky = ['string','chime','glass','wood'].includes(prof.voices[0]);
@@ -10581,11 +10612,14 @@ $$('randRefresh').addEventListener('click', (e) => {
       const d = semiDist(genFreqs[r], genFreqs[rr]);
       if (d === 1 || d === 6) return false;
     }
-    // Heavy-drone moods: also reject a minor 2nd against a neighbouring column,
-    // where long reverb/sustain tails overlap and would beat.
+    // Sustained styles: even the trimmed bowl/long envelopes can ring for ~1.5-2
+    // bars, which at a 16-step loop means a tail can still be sounding ANYWHERE
+    // in the next pass — not just the neighbouring column. Check the whole page
+    // for a minor-2nd clash, not just ±1 step, or most of the real overlap goes
+    // unchecked.
     if (tailGuard) {
-      for (const cc of [c - 1, c + 1]) {
-        if (cc < 0 || cc >= COLS) continue;
+      for (let cc = 0; cc < COLS; cc++) {
+        if (cc === c) continue;
         for (let rr = 0; rr < ROWS; rr++) {
           if (!pg[rr][cc]) continue;
           if (semiDist(genFreqs[r], genFreqs[rr]) === 1) return false;
@@ -10794,6 +10828,13 @@ $$('randRefresh').addEventListener('click', (e) => {
         applyMoodFx(note, r);
         page[r][c] = note;
       }
+
+      // Keep it minimal — 3 notes on calmer pages, 4 on the busier ones, instead
+      // of letting bass+motif+voices+ghost stack up into a fuller pattern.
+      // Sustained styles (bowl/long/air) ring long enough that even 3 at once
+      // reads as crowded, so they get just 2 regardless of section density.
+      const isSustained = ['bowl', 'long', 'air'].includes(prof.adsrStyle);
+      trimToMinimal(page, isSustained ? 2 : (sec.d > 0.55 ? 4 : 3));
     }
 
     switchPage(0);
@@ -10949,6 +10990,11 @@ $$('randRefresh').addEventListener('click', (e) => {
       S.cells[r][c] = note;
     }
   }
+
+  // Keep it minimal — a small handful of notes (3-4) rather than a fuller page.
+  // Sustained styles (bowl/long/air) ring long enough that even 3 at once reads
+  // as crowded, so they get just 2.
+  trimToMinimal(S.cells, ['bowl', 'long', 'air'].includes(prof.adsrStyle) ? 2 : (rng() < 0.5 ? 3 : 4));
 
   renderAll();
   showPoem(generatePoem({
